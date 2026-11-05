@@ -321,3 +321,389 @@ async function sesiAction(a, id, btn, ctx) {
   }
   return false;
 }
+let uMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1), uSel = ymd(new Date());
+const sec = (title, inner) => `<details class="card sec"><summary>${title}</summary>${inner}</details>`;
+
+// ====== KARTU PROGRAM (siswa/guru) ======
+function enrollCard(role, es, programs) {
+  if (!es || !es.length) return `<p class="msg">Belum ada program.</p>`;
+  const pm = Object.fromEntries((programs || []).map((p) => [p.id, p]));
+  return es.map((e) => {
+    const p = pm[e.programId] || {};
+    const dur = Number(e.durasi_menit) || Number(p.durasi_default_menit) || 45;
+    const st = e.status || "-";
+    const badge = st === "aktif" ? "done" : (st === "menunggu" ? "wait" : "bad");
+    const gradePend = e.status_grade === "menunggu_persetujuan" ? ` <span class="badge wait">grade menunggu persetujuan</span>` : "";
+    return `<div class="row"><div>
+      <strong>${esc(e.nama_program || p.nama_program || e.programId)}</strong> ${gradeBadge(e.grade_siswa || p.grade)}
+      <br><small>${role === "guru" ? "Siswa: " + esc(e.nama_siswa) : "Guru: " + esc(e.nama_guru)} · ${dur} menit · ${rp(p.harga)}</small>${gradePend}
+    </div><span class="badge ${badge}">${esc(st)}</span></div>`;
+  }).join("");
+}
+
+// ====== USER VIEW (siswa/guru) ======
+async function userView(user, nama, role, p) {
+  const fld = role === "guru" ? "guruId" : "siswaId", t = ymd(new Date());
+  const ld = async (c) => (await getDocs(query(collection(db, c), where(fld, "==", user.uid)))).docs.map((d) => ({ id: d.id, ...d.data() }));
+  const progSnap = await getDocs(collection(db, "program"));
+  const programs = progSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const [es, js, ab, ct, rq] = await Promise.all(["siswa_program", "jadwal", "absensi", "catatan_les", "reschedule"].map(ld));
+  const A = Object.fromEntries(ab.map((x) => [x.id, x])), C = Object.fromEntries(ct.map((x) => [x.id, x]));
+  const key = (j) => j.tanggal + (j.jam_mulai || ""), asc = (a, b) => key(a).localeCompare(key(b)), desc = (a, b) => key(b).localeCompare(key(a));
+  const shown = js.filter((j) => j.status === "terjadwal" || j.status === "selesai");
+  const who = (j) => role === "guru" ? j.nama_siswa + " · " + j.nama_program : j.nama_program + " · " + j.nama_guru;
+  const jam = (j) => j.jam_mulai + "–" + jamAkhir(j.jam_mulai, j.durasi_menit);
+  const full = (j, showDate) => `<div class="row" style="display:block">${showDate ? `<strong>${tglLabel(j.tanggal)}</strong> ` : ""}<strong>${jam(j)}</strong> ${esc(who(j))}
+    ${j.tipe !== "reguler" ? `<small>(${esc(j.tipe)})</small>` : ""} <span class="badge ${j.status === "selesai" ? "done" : "wait"}">${esc(j.status)}</span><br>${sesiBox(j, role, A, C, [])}</div>`;
+  const mini = (j) => `<div class="row"><div><strong>${tglLabel(j.tanggal)}</strong> ${jam(j)}<br><small>${esc(who(j))}</small></div>${j.status === "selesai" ? `<span class="badge done">selesai</span>` : ""}</div>`;
+  const reqs = rq.sort((a, b) => (b.created_at ? b.created_at.seconds : 0) - (a.created_at ? a.created_at.seconds : 0)).slice(0, 10);
+
+  const draw = () => {
+    const wk0 = monday(new Date()), w0 = ymd(wk0), w1 = ymd(addDays(wk0, 6));
+    const hari = js.filter((j) => j.tanggal === t && j.status !== "dibatalkan" && j.status !== "digantikan").sort(asc);
+    const late = role === "guru" ? js.filter((j) => j.tanggal < t && j.status === "terjadwal").sort(asc) : [];
+    const minggu = shown.filter((j) => j.tanggal >= w0 && j.tanggal <= w1).sort(asc);
+    const f = uMonth, l = new Date(f.getFullYear(), f.getMonth() + 1, 0), days = [];
+    for (let d = monday(f); d <= addDays(monday(l), 6); d = addDays(d, 1)) days.push(ymd(d));
+    const cell = (ds) => {
+      const it = shown.filter((j) => j.tanggal === ds).sort(asc), m = Number(ds.slice(5, 7)), d = Number(ds.slice(8));
+      return `<button class="cel ${ds === uSel ? "sel" : ""} ${ds === t ? "today" : ""} ${m - 1 !== f.getMonth() ? "out" : ""}" data-ud="${ds}"><b>${d}</b>
+        ${it.slice(0, 2).map((j) => `<span class="chip">${j.jam_mulai}</span>`).join("")}${it.length > 2 ? `<span class="chip more">+${it.length - 2}</span>` : ""}</button>`;
+    };
+    const sel = js.filter((j) => j.tanggal === uSel).sort(asc);
+    const hariCard = `<div class="card"><h2>Hari ini</h2><small>${tglLabel(t)}</small>
+      ${late.length ? `<p class="msg err">${late.length} sesi sebelumnya belum diabsen:</p>${late.map((j) => full(j, true)).join("")}` : ""}
+      ${hari.map((j) => full(j)).join("") || `<p class="msg">Tidak ada kelas hari ini.</p>`}</div>`;
+    const mingguCard = `<div class="card"><h2>Minggu ini</h2>${minggu.map(mini).join("") || `<p class="msg">Tidak ada kelas minggu ini.</p>`}</div>`;
+    const kal = `<div class="card"><div class="top"><button class="alt sm" data-um="-1">‹</button><h2 style="margin:0">${f.toLocaleDateString("id-ID", { month: "long", year: "numeric" })}</h2><button class="alt sm" data-um="1">›</button></div>
+      <div class="cal sm" style="margin-top:12px">${["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].map((x) => `<div class="dh">${x}</div>`).join("")}${days.map(cell).join("")}</div>
+      <p class="msg"><button class="alt sm" data-um="0">Bulan ini</button> Klik tanggal untuk melihat detail.</p></div>`;
+    const detail = `<div class="card"><h2>${tglLabel(uSel)}</h2>${sel.map((j) => full(j)).join("") || `<p class="msg">Tidak ada kelas.</p>`}</div>`;
+
+    // program baru untuk didaftarkan (siswa)
+    let regForm = "";
+    if (role === "siswa") {
+      const taken = new Set(es.map((e) => e.programId));
+      const avail = programs.filter((p) => !taken.has(p.id));
+      regForm = `<div class="card"><h2>Daftar program baru</h2>
+        ${avail.length ? `<p class="msg">Pilih program yang ingin diikuti. Grade akan ditentukan oleh guru/admin setelah pendaftaran disetujui.</p>
+        <label>Program</label><select id="newprog">${avail.map((p) => `<option value="${p.id}">${esc(p.nama_program)} · ${esc(p.grade || "-")} · ${rp(p.harga)}</option>`).join("")}</select>
+        <button class="sm" id="regbtn">Daftar</button>` : `<p class="msg">Semua program sudah Anda ikuti atau belum ada program tersedia.</p>`}
+      </div>`;
+    }
+
+    let more = sec("Pengajuan reschedule", reqs.map((r) => reqCard(r, role, [])).join("") || `<p class="msg">Belum ada.</p>`);
+    if (role === "siswa") {
+      more += sec("Catatan les dan PR", ct.sort(desc).slice(0, 10).map((c) => `<div class="row" style="display:block"><strong>${tglLabel(c.tanggal)}</strong><br><small>Materi: ${esc(c.materi) || "-"}<br>PR: ${esc(c.pr) || "-"}${c.pr_tenggat ? " (tenggat " + esc(c.pr_tenggat) + ")" : ""}</small></div>`).join("") || `<p class="msg">Belum ada catatan.</p>`)
+        + sec("Riwayat absensi", ab.sort(desc).slice(0, 10).map((x) => `<div class="row"><span>${tglLabel(x.tanggal)} · ${esc(x.nama_program)}</span><span class="badge ${x.status === "hadir" ? "done" : "wait"}">${esc(x.status)}</span></div>`).join("") || `<p class="msg">Belum ada.</p>`);
+    }
+    more += sec(role === "guru" ? "Siswa saya" : "Program saya", enrollCard(role, es, programs));
+
+    root.innerHTML = topBar(nama, role) + hariCard + mingguCard + kal + detail + regForm + (p.exists() ? profileView(role, p.data()) : "") + more;
+    $("#out").onclick = () => signOut(auth);
+    root.querySelectorAll("[data-um]").forEach((b) => b.onclick = () => {
+      const v = Number(b.dataset.um), n = new Date();
+      uMonth = v === 0 ? new Date(n.getFullYear(), n.getMonth(), 1) : new Date(uMonth.getFullYear(), uMonth.getMonth() + v, 1);
+      if (v === 0) uSel = t;
+      draw();
+    });
+    root.querySelectorAll("[data-ud]").forEach((b) => b.onclick = () => { uSel = b.dataset.ud; draw(); });
+    root.querySelectorAll("[data-act]").forEach((b) => b.onclick = async () => {
+      b.disabled = true;
+      try { if (await sesiAction(b.dataset.act, b.dataset.id, b, { user, role, gurus: [] })) await showHome(user); else b.disabled = false; }
+      catch (err) { b.disabled = false; alert(errText(err)); }
+    });
+    const rb = $("#regbtn");
+    if (rb) rb.onclick = async () => {
+      rb.disabled = true;
+      try {
+        const pid = $("#newprog").value;
+        const prog = programs.find((x) => x.id === pid);
+        await addDoc(collection(db, "siswa_program"), {
+          siswaId: user.uid, programId: pid, nama_siswa: nama,
+          nama_program: prog.nama_program, status: "menunggu",
+          grade_siswa: "", status_grade: "menunggu_persetujuan",
+          guruId: "", nama_guru: "", durasi_menit: null,
+          created_at: serverTimestamp(), updated_at: serverTimestamp()
+        });
+        alert("Pendaftaran terkirim. Menunggu persetujuan admin/guru.");
+        await showHome(user);
+      } catch (err) { rb.disabled = false; alert(errText(err)); }
+    };
+  };
+  draw();
+}
+
+// ====== ADMIN VIEW ======
+let adminCalMode = "bulan", adminFilterGuru = "", adminFilterSiswa = "", adminCalMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1), adminCalDay = ymd(new Date());
+
+async function adminView(user, nama) {
+  const draw = async () => {
+    const [gs, ss, pr, sp, po, rq, js, ab] = await Promise.all([
+      getDocs(collection(db, "guru")),
+      getDocs(collection(db, "siswa")),
+      getDocs(collection(db, "program")),
+      getDocs(collection(db, "siswa_program")),
+      getDocs(collection(db, "pola_jadwal")),
+      getDocs(query(collection(db, "reschedule"), where("status", "==", "menunggu"))),
+      getDocs(collection(db, "jadwal")),
+      getDocs(collection(db, "absensi"))
+    ]);
+    const gurus = gs.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const siswas = ss.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const programs = pr.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const enrolls = sp.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const polas = po.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const reqs = rq.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const jadwals = js.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const absensi = Object.fromEntries(ab.docs.map((d) => [d.id, d.data()]));
+
+    const pendingGuru = gurus.filter((g) => g.status_verifikasi === "menunggu");
+    const pendingSiswa = siswas.filter((s) => s.status_verifikasi === "menunggu");
+    const pendingEnroll = enrolls.filter((e) => e.status === "menunggu");
+    const pendingGrade = enrolls.filter((e) => e.status_grade === "menunggu_persetujuan");
+
+    const kpi = `<div class="kpi">
+      <div><b>${pendingGuru.length + pendingSiswa.length}</b><small>Akun menunggu verifikasi</small></div>
+      <div><b>${pendingEnroll.length}</b><small>Pendaftaran program baru</small></div>
+      <div><b>${pendingGrade.length}</b><small>Perubahan grade</small></div>
+      <div><b>${reqs.length}</b><small>Reschedule menunggu</small></div>
+      <div><b>${siswas.length}</b><small>Total siswa</small></div>
+      <div><b>${gurus.length}</b><small>Total guru</small></div>
+    </div>`;
+
+    const tab = (id, label) => `<button data-tab="${id}" class="${adminTab === id ? "on" : ""}">${label}</button>`;
+    let body = "";
+
+    // ===== VERIFIKASI =====
+    if (adminTab === "verif") {
+      body = `<h2>Verifikasi akun</h2>`
+        + (pendingGuru.length ? `<h3>Guru</h3>` + pendingGuru.map((g) => `<div class="row"><div><strong>${esc(g.nama_lengkap)}</strong><br><small>${esc(g.no_hp)}</small></div>
+            <button class="sm" data-ver="guru" data-id="${g.id}">Verifikasi</button></div>`).join("") : "")
+        + (pendingSiswa.length ? `<h3>Siswa</h3>` + pendingSiswa.map((s) => `<div class="row"><div><strong>${esc(s.nama_lengkap)}</strong><br><small>${esc(s.nama_orangtua)} · ${esc(s.no_hp_orangtua)}</small></div>
+            <button class="sm" data-ver="siswa" data-id="${s.id}">Verifikasi</button></div>`).join("") : "")
+        + (!pendingGuru.length && !pendingSiswa.length ? `<p class="msg">Tidak ada akun menunggu verifikasi.</p>` : "");
+    }
+
+    // ===== PROGRAM =====
+    else if (adminTab === "program") {
+      body = `<h2>Program</h2>`
+        + (programs.length ? `<table class="tbl"><thead><tr><th>Nama</th><th>Grade</th><th>Durasi</th><th>Harga</th></tr></thead><tbody>
+          ${programs.map((p) => `<tr><td><strong>${esc(p.nama_program)}</strong></td><td>${gradeBadge(p.grade) || "-"}</td>
+            <td>${p.durasi_default_menit || 45} menit</td><td>${rp(p.harga)}</td></tr>`).join("")}
+          </tbody></table>` : `<p class="msg">Belum ada program.</p>`)
+        + `<details><summary>Tambah program baru</summary><div data-newprog>
+            <label>Nama program</label><input class="pn" placeholder="mis. Piano Klasik">
+            <label>Grade (teks bebas)</label><input class="pg" placeholder="mis. TK / SD / Grade 1 / Dewasa">
+            <label>Durasi normal (menit)</label><input class="pd" type="number" value="45">
+            <label>Harga (Rp)</label><input class="ph" type="number" value="0">
+            <button class="sm" data-act="addprog">Simpan program</button></div></details>`;
+    }
+
+    // ===== PENDAFTARAN =====
+    else if (adminTab === "enroll") {
+      const progMap = Object.fromEntries(programs.map((p) => [p.id, p]));
+      body = `<h2>Pendaftaran program</h2>`
+        + (pendingEnroll.length ? `<h3>Menunggu persetujuan</h3>` + pendingEnroll.map((e) => `<div class="row"><div>
+            <strong>${esc(e.nama_siswa)}</strong> · ${esc(e.nama_program)} ${gradeBadge(progMap[e.programId]?.grade)}
+            <br><small>Diminta siswa/orang tua</small></div>
+            <div><button class="sm" data-approve-enroll="${e.id}">Setujui</button> <button class="alt sm" data-reject-enroll="${e.id}">Tolak</button></div></div>`).join("") : "")
+        + (pendingGrade.length ? `<h3>Perubahan grade menunggu persetujuan</h3>` + pendingGrade.map((e) => `<div class="row"><div>
+            <strong>${esc(e.nama_siswa)}</strong> · ${esc(e.nama_program)}<br><small>Diajukan oleh ${esc(e.diajukan_oleh_nama || "guru")} → grade baru: ${gradeBadge(e.grade_siswa)}</small></div>
+            <div><button class="sm" data-approve-grade="${e.id}">Setujui</button> <button class="alt sm" data-reject-grade="${e.id}">Tolak</button></div></div>`).join("") : "")
+        + `<h3>Semua pendaftaran</h3>
+          ${enrolls.length ? `<table class="tbl"><thead><tr><th>Siswa</th><th>Program</th><th>Grade</th><th>Durasi</th><th>Guru</th><th>Status</th></tr></thead><tbody>
+          ${enrolls.map((e) => {
+            const p = progMap[e.programId] || {};
+            const dur = e.durasi_menit || p.durasi_default_menit || 45;
+            return `<tr><td>${esc(e.nama_siswa)}</td><td>${esc(e.nama_program)}</td>
+              <td>${gradeBadge(e.grade_siswa || p.grade) || "-"}</td>
+              <td>${dur} menit <button class="alt sm" data-edit-dur="${e.id}">edit</button></td>
+              <td>${esc(e.nama_guru) || "-"}</td>
+              <td><span class="badge ${e.status === "aktif" ? "done" : "wait"}">${esc(e.status)}</span></td></tr>`;
+          }).join("")}</tbody></table>` : `<p class="msg">Belum ada pendaftaran.</p>`}`;
+    }
+
+    // ===== POLA JADWAL =====
+    else if (adminTab === "pola") {
+      body = `<h2>Pola jadwal rutin</h2>`
+        + (polas.length ? `<table class="tbl"><thead><tr><th>Siswa / Program</th><th>Hari</th><th>Jam</th><th>Mulai</th><th>Status</th><th></th></tr></thead><tbody>
+          ${polas.map((p) => `<tr><td>${esc(p.nama_siswa)}<br><small>${esc(p.nama_program)} · ${esc(p.nama_guru)}</small></td>
+            <td>${esc(p.hari)}</td><td>${esc(p.jam_mulai)}</td><td>${esc(p.tanggal_mulai || "-")}</td>
+            <td><span class="badge ${p.status === "aktif" ? "done" : "bad"}">${esc(p.status)}</span></td>
+            <td>${p.status === "aktif" ? `<button class="alt sm" data-act="closepola" data-id="${p.id}">Hentikan</button>` : ""}</td></tr>`).join("")}
+          </tbody></table>` : `<p class="msg">Belum ada pola. Buat pola dari tab "Pendaftaran" setelah menyetujui program siswa.</p>`)
+        + `<button class="sm" data-act="gen">Generate sesi 3 bulan ke depan</button>`;
+    }
+
+    // ===== KALENDER (tab baru) =====
+    else if (adminTab === "kalender") {
+      const fg = adminFilterGuru, fs = adminFilterSiswa;
+      const jf = jadwals.filter((j) => (!fg || j.guruId === fg) && (!fs || j.siswaId === fs) && j.status !== "dibatalkan" && j.status !== "digantikan");
+      const mode = adminCalMode;
+      const gm = Object.fromEntries(gurus.map((g) => [g.id, g]));
+      const chip = (j) => `<span class="chip">${j.jam_mulai} ${esc((j.nama_siswa || "").split(" ")[0])}</span>`;
+      const listItem = (j) => `<div class="row" style="display:block"><div class="top">
+          <strong>${j.jam_mulai}–${jamAkhir(j.jam_mulai, j.durasi_menit)}</strong>
+          <span class="badge ${j.status === "selesai" ? "done" : "wait"}">${esc(j.status)}</span></div>
+          <small>${esc(j.nama_siswa)} · ${esc(j.nama_program)} · ${esc(j.nama_guru)}</small>
+          ${absensi[j.id] ? `<br><small>Absensi: <b>${esc(absensi[j.id].status)}</b></small>` : ""}
+        </div>`;
+
+      let calHtml = "";
+      if (mode === "bulan") {
+        const f = adminCalMonth, l = new Date(f.getFullYear(), f.getMonth() + 1, 0), days = [];
+        for (let d = monday(f); d <= addDays(monday(l), 6); d = addDays(d, 1)) days.push(ymd(d));
+        const cell = (ds) => {
+          const it = jf.filter((j) => j.tanggal === ds), m = Number(ds.slice(5, 7)), d = Number(ds.slice(8));
+          return `<button class="cel ${ds === adminCalDay ? "sel" : ""} ${ds === ymd(new Date()) ? "today" : ""} ${m - 1 !== f.getMonth() ? "out" : ""}" data-ad="${ds}"><b>${d}</b>
+            ${it.slice(0, 2).map(chip).join("")}${it.length > 2 ? `<span class="chip more">+${it.length - 2}</span>` : ""}</button>`;
+        };
+        calHtml = `<div class="top"><button class="alt sm" data-am="-1">‹</button><h2 style="margin:0">${f.toLocaleDateString("id-ID", { month: "long", year: "numeric" })}</h2><button class="alt sm" data-am="1">›</button></div>
+          <div class="cal" style="margin-top:12px">${["Sen","Sel","Rab","Kam","Jum","Sab","Min"].map((x) => `<div class="dh">${x}</div>`).join("")}${days.map(cell).join("")}</div>
+          <p class="msg"><button class="alt sm" data-am="0">Bulan ini</button></p>`;
+      } else if (mode === "minggu") {
+        const base = new Date(adminCalDay + "T00:00:00"), m0 = monday(base), days = [];
+        for (let i = 0; i < 7; i++) days.push(ymd(addDays(m0, i)));
+        calHtml = `<div class="top"><button class="alt sm" data-aw="-1">‹</button><h2 style="margin:0">Minggu ${days[0]} s/d ${days[6]}</h2><button class="alt sm" data-aw="1">›</button></div>
+          <div class="cal" style="margin-top:12px">${["Sen","Sel","Rab","Kam","Jum","Sab","Min"].map((x) => `<div class="dh">${x}</div>`).join("")}
+          ${days.map((ds) => { const it = jf.filter((j) => j.tanggal === ds); return `<div class="cel ${ds === ymd(new Date()) ? "today" : ""}"><b>${ds.slice(8)}</b>${it.map(chip).join("")}</div>`; }).join("")}
+          </div>`;
+      } else {
+        const it = jf.filter((j) => j.tanggal === adminCalDay).sort((a, b) => a.jam_mulai.localeCompare(b.jam_mulai));
+        calHtml = `<div class="top"><button class="alt sm" data-ad="-1">‹</button><h2 style="margin:0">${tglLabel(adminCalDay)}</h2><button class="alt sm" data-ad="1">›</button></div>
+          <div style="margin-top:12px">${it.map(listItem).join("") || `<p class="msg">Tidak ada kelas.</p>`}</div>`;
+      }
+
+      body = `<h2>Kalender semua kelas</h2>
+        <div class="ctrl">
+          <select id="fguru"><option value="">Semua guru</option>${gurus.map((g) => `<option value="${g.id}" ${fg === g.id ? "selected" : ""}>${esc(g.nama_lengkap)}</option>`).join("")}</select>
+          <select id="fsiswa"><option value="">Semua siswa</option>${siswas.map((s) => `<option value="${s.id}" ${fs === s.id ? "selected" : ""}>${esc(s.nama_lengkap)}</option>`).join("")}</select>
+          <select id="fmode">
+            <option value="bulan" ${mode === "bulan" ? "selected" : ""}>Bulanan</option>
+            <option value="minggu" ${mode === "minggu" ? "selected" : ""}>Mingguan</option>
+            <option value="hari" ${mode === "hari" ? "selected" : ""}>Harian</option>
+          </select>
+        </div>
+        <div class="card">${calHtml}</div>`;
+    }
+
+    // ===== RESCHEDULE =====
+    else if (adminTab === "resched") {
+      body = `<h2>Pengajuan reschedule</h2>` + (reqs.length ? reqs.map((r) => reqCard(r, "admin", gurus)).join("") : `<p class="msg">Tidak ada pengajuan menunggu.</p>`);
+    }
+
+    root.innerHTML = topBar(nama, "admin") + kpi + `<div class="tabs">
+        ${tab("verif", "Verifikasi")}${tab("program", "Program")}${tab("enroll", "Pendaftaran")}${tab("pola", "Pola jadwal")}${tab("kalender", "Kalender")}${tab("resched", "Reschedule")}
+      </div><div class="card">${body}</div>`;
+
+    $("#out").onclick = () => signOut(auth);
+    root.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { adminTab = b.dataset.tab; draw(); });
+
+    // filter kalender
+    const sel = (id, val, cb) => { const el = $("#" + id); if (el) el.onchange = () => { cb(el.value); draw(); }; };
+    sel("fguru", null, (v) => adminFilterGuru = v);
+    sel("fsiswa", null, (v) => adminFilterSiswa = v);
+    sel("fmode", null, (v) => adminCalMode = v);
+    root.querySelectorAll("[data-am]").forEach((b) => b.onclick = () => { const v = Number(b.dataset.am); adminCalMonth = v === 0 ? new Date(new Date().getFullYear(), new Date().getMonth(), 1) : new Date(adminCalMonth.getFullYear(), adminCalMonth.getMonth() + v, 1); draw(); });
+    root.querySelectorAll("[data-aw]").forEach((b) => b.onclick = () => { const v = Number(b.dataset.aw); adminCalDay = ymd(addDays(new Date(adminCalDay + "T00:00:00"), v * 7)); draw(); });
+    root.querySelectorAll("[data-ad]").forEach((b) => b.onclick = () => { const v = b.dataset.ad; if (v === "-1" || v === "1") adminCalDay = ymd(addDays(new Date(adminCalDay + "T00:00:00"), Number(v))); else adminCalDay = v; draw(); });
+
+    // verifikasi akun
+    root.querySelectorAll("[data-ver]").forEach((b) => b.onclick = async () => {
+      b.disabled = true;
+      try { await updateDoc(doc(db, b.dataset.ver, b.dataset.id), { status_verifikasi: "terverifikasi", updated_at: serverTimestamp() }); await draw(); }
+      catch (err) { b.disabled = false; alert(errText(err)); }
+    });
+
+    // approve/reject enroll
+    root.querySelectorAll("[data-approve-enroll]").forEach((b) => b.onclick = async () => {
+      b.disabled = true;
+      try {
+        const id = b.dataset.approveEnroll;
+        const e = enrolls.find((x) => x.id === id);
+        const gid = prompt("ID guru (kosongkan untuk assign nanti):", e.guruId || "");
+        const guru = gurus.find((g) => g.id === gid);
+        await updateDoc(doc(db, "siswa_program", id), {
+          status: "aktif", grade_siswa: e.grade_siswa || (programs.find((p) => p.id === e.programId)?.grade || ""),
+          status_grade: "disetujui", guruId: guru?.id || "", nama_guru: guru?.nama_lengkap || "",
+          disetujui_oleh: user.uid, updated_at: serverTimestamp()
+        });
+        await draw();
+      } catch (err) { b.disabled = false; alert(errText(err)); }
+    });
+    root.querySelectorAll("[data-reject-enroll]").forEach((b) => b.onclick = async () => {
+      b.disabled = true;
+      try { await updateDoc(doc(db, "siswa_program", b.dataset.rejectEnroll), { status: "ditolak", updated_at: serverTimestamp() }); await draw(); }
+      catch (err) { b.disabled = false; alert(errText(err)); }
+    });
+    root.querySelectorAll("[data-approve-grade]").forEach((b) => b.onclick = async () => {
+      b.disabled = true;
+      try { await updateDoc(doc(db, "siswa_program", b.dataset.approveGrade), { status_grade: "disetujui", disetujui_oleh: user.uid, updated_at: serverTimestamp() }); await draw(); }
+      catch (err) { b.disabled = false; alert(errText(err)); }
+    });
+    root.querySelectorAll("[data-reject-grade]").forEach((b) => b.onclick = async () => {
+      b.disabled = true;
+      try { await updateDoc(doc(db, "siswa_program", b.dataset.rejectGrade), { status_grade: "ditolak", updated_at: serverTimestamp() }); await draw(); }
+      catch (err) { b.disabled = false; alert(errText(err)); }
+    });
+    root.querySelectorAll("[data-edit-dur]").forEach((b) => b.onclick = async () => {
+      const id = b.dataset.editDur, e = enrolls.find((x) => x.id === id);
+      const p = programs.find((x) => x.id === e.programId);
+      const v = prompt("Durasi (menit) untuk siswa ini (kosongkan = pakai default program " + (p?.durasi_default_menit || 45) + "):", e.durasi_menit || "");
+      if (v === null) return;
+      b.disabled = true;
+      try { await updateDoc(doc(db, "siswa_program", id), { durasi_menit: v === "" ? null : Number(v), updated_at: serverTimestamp() }); await draw(); }
+      catch (err) { b.disabled = false; alert(errText(err)); }
+    });
+
+    // tombol aksi umum
+    root.querySelectorAll("[data-act]").forEach((b) => b.onclick = async () => {
+      b.disabled = true;
+      try {
+        const a = b.dataset.act;
+        if (a === "addprog") {
+          const box = root.querySelector("[data-newprog]");
+          const n = box.querySelector(".pn").value.trim();
+          if (!n) { alert("Nama program wajib."); b.disabled = false; return; }
+          await addDoc(collection(db, "program"), { nama_program: n, grade: box.querySelector(".pg").value.trim(),
+            durasi_default_menit: Number(box.querySelector(".pd").value) || 45, harga: Number(box.querySelector(".ph").value) || 0,
+            created_at: serverTimestamp() });
+          await draw(); return;
+        }
+        if (a === "closepola") { await closePola({ id: b.dataset.id }); await draw(); return; }
+        if (a === "gen") { const n = await generate(polas, enrolls, programs); alert(n + " sesi dibuat."); await draw(); return; }
+        if (["approve", "reject"].includes(a)) {
+          const ok = await sesiAction(a, b.dataset.id, b, { user, role: "admin", gurus });
+          if (ok) await draw(); else b.disabled = false; return;
+        }
+      } catch (err) { b.disabled = false; alert(errText(err)); }
+    });
+  };
+  await draw();
+}
+
+async function showHome(user) {
+  if (busy) return;
+  $("#hu").innerHTML = "";
+  root.innerHTML = `<div class="card">Memuat…</div>`;
+  try {
+    const u = await getDoc(doc(db, "users", user.uid));
+    if (!u.exists()) {
+      root.innerHTML = `<div class="card"><h2>Akun belum lengkap</h2><p>Data akun tidak ditemukan. Hubungi admin.</p><button id="out" class="alt">Keluar</button></div>`;
+      $("#out").onclick = () => signOut(auth); return;
+    }
+    const { role, nama } = u.data();
+    if (role === "admin") { await adminView(user, nama); return; }
+    const p = await getDoc(doc(db, role, user.uid));
+    await userView(user, nama, role, p);
+  } catch (e) {
+    root.innerHTML = `<div class="card"><h2>Gagal memuat</h2><p class="msg err">${esc(errText(e))}</p><button id="out" class="alt">Keluar</button></div>`;
+    $("#out").onclick = () => signOut(auth);
+  }
+}
+
+onAuthStateChanged(auth, (user) => { if (busy) return; user ? showHome(user) : authView("masuk"); });
+</script>
+</body>
+</html>
