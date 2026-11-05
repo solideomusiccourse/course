@@ -1,114 +1,323 @@
-rules_version = '2';
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SOLIDEO MUSIC COURSE</title>
+<style>
+:root{--ink:#1d1b2e;--mute:#6b6880;--bg:#f6f4fb;--card:#fff;--line:#e2deee;--brand:#3b2a8c;--brand2:#e8b53a;--ok:#1f7a4d;--err:#b3261e}
+*{box-sizing:border-box}
+body{margin:0;font-family:Georgia,"Times New Roman",serif;background:var(--bg);color:var(--ink);line-height:1.5}
+header{background:var(--brand);color:#fff;padding:12px 16px;border-bottom:4px solid var(--brand2);display:flex;justify-content:space-between;align-items:center}
+header h1{margin:0;font-size:1.05rem;letter-spacing:.04em}
+header small{color:#d6d0f5;font-family:system-ui,sans-serif}
+main{max-width:720px;margin:0 auto;padding:20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:20px;margin-bottom:16px}
+h2{margin:0 0 12px;font-size:1.2rem}h3{margin:16px 0 8px;font-size:1rem;color:var(--brand)}
+label{display:block;margin:12px 0 4px;font:600 .9rem system-ui,sans-serif}
+input,select,textarea{width:100%;padding:11px;border:1px solid #bdb8d4;border-radius:6px;font:1rem system-ui,sans-serif;background:#fff}
+input:focus,select:focus,button:focus-visible{outline:3px solid var(--brand2);outline-offset:1px}
+button{font:600 1rem system-ui,sans-serif;border:0;border-radius:6px;padding:11px 18px;cursor:pointer;background:var(--brand);color:#fff;margin-top:12px}
+button.alt{background:#fff;color:var(--brand);border:1px solid var(--brand)}
+button.sm{margin:0;padding:7px 12px;font-size:.9rem}
+button:disabled{opacity:.5;cursor:not-allowed}
+.msg{margin-top:12px;font:.95rem system-ui,sans-serif}.err{color:var(--err)}.ok{color:var(--ok)}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line);font-family:system-ui,sans-serif}
+.row:first-of-type{border-top:0}
+.badge{display:inline-block;padding:2px 10px;border-radius:99px;font:600 .8rem system-ui,sans-serif}
+.wait{background:#fdf0cf;color:#7a5a00}.done{background:#d9f2e4;color:var(--ok)}.bad{background:#fadbd9;color:var(--err)}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+dl{margin:0;font-family:system-ui,sans-serif}dt{color:var(--mute);font-size:.85rem;margin-top:10px}dd{margin:0}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.tabs button{margin:0;padding:9px 14px;font-size:.9rem;background:#fff;color:var(--brand);border:1px solid var(--brand)}
+.tabs button.on{background:var(--brand);color:#fff}
+details{margin-top:10px;font-family:system-ui,sans-serif}summary{cursor:pointer;color:var(--brand);font-weight:600}
+small{color:var(--mute)}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;min-width:560px}
+.dh{text-align:center;font:600 .8rem system-ui,sans-serif;color:var(--mute);padding:4px}
+.cel{margin:0;min-height:76px;padding:4px;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:6px;font:400 .75rem system-ui,sans-serif;text-align:left;display:flex;flex-direction:column;gap:2px;align-items:stretch}
+.cel b{font-size:.85rem}
+.cel.out{background:#f1eef8;color:var(--mute)}
+.cel.today{border:2px solid var(--brand2)}
+.cel.sel{outline:3px solid var(--brand)}
+.chip{background:#e6e1fa;border-radius:4px;padding:1px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.7rem}
+.chip.more{background:var(--brand2)}
+.chip.guru{background:#fde9c4}
+.scroll{overflow-x:auto}
+.um{position:relative}
+.av{width:38px;height:38px;border-radius:50%;background:var(--brand2);color:var(--ink);display:flex;align-items:center;justify-content:center;font:700 1rem system-ui,sans-serif;cursor:pointer;list-style:none;margin:0}
+.av::-webkit-details-marker{display:none}
+.menu{position:absolute;right:0;top:46px;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:12px;min-width:180px;z-index:5;font-family:system-ui,sans-serif}
+.menu button{width:100%}
+.sec>summary{font-weight:600;cursor:pointer;color:var(--brand);font-family:system-ui,sans-serif}
+.sec[open]>summary{margin-bottom:10px}
+.cal.sm{min-width:0}.cal.sm .cel{min-height:56px;padding:3px}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px}
+.kpi div{background:#fff;border:1px solid var(--line);border-radius:8px;padding:14px;font-family:system-ui,sans-serif}
+.kpi b{display:block;font-size:1.6rem;color:var(--brand)}
+.kpi small{font-size:.8rem}
+table.tbl{width:100%;border-collapse:collapse;font-family:system-ui,sans-serif;font-size:.9rem}
+table.tbl th,table.tbl td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+table.tbl th{font-size:.8rem;color:var(--mute);text-transform:uppercase;letter-spacing:.03em}
+.ctrl{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;font-family:system-ui,sans-serif}
+.ctrl select,.ctrl input{width:auto;min-width:140px}
+.pill{background:#eee9fb;color:var(--brand);border-radius:99px;padding:3px 10px;font:600 .8rem system-ui,sans-serif}
+</style>
+</head>
+<body>
+<header><h1>SOLIDEO MUSIC COURSE</h1><div id="hu"></div></header>
+<main id="app"><div class="card">Memuat…</div></main>
 
-service cloud.firestore {
-  match /databases/{database}/documents {
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, collection, query, where, getDocs, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-    function signedIn() { return request.auth != null; }
-    function isAdmin() {
-      return signedIn()
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-    }
-    function isOwner(id) { return signedIn() && request.auth.uid == id; }
-    function party(d) {
-      return signedIn() && (d.siswaId == request.auth.uid || d.guruId == request.auth.uid);
-    }
-    function ownsJadwal(id) {
-      return signedIn() && get(/databases/$(database)/documents/jadwal/$(id)).data.guruId == request.auth.uid;
-    }
+const firebaseConfig = {
+  apiKey: "AIzaSyBzkDez2oSiD6dkpOpn4oHw6GM5E3ioZpk",
+  authDomain: "solideo-music-course.firebaseapp.com",
+  projectId: "solideo-music-course",
+  storageBucket: "solideo-music-course.firebasestorage.app",
+  messagingSenderId: "905695709090",
+  appId: "1:905695709090:web:5f75bd671c499e6db414fb"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const $ = (s) => document.querySelector(s);
+const root = $("#app");
+const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+let busy = false;
 
-    match /users/{uid} {
-      allow read: if isOwner(uid) || isAdmin();
-      allow create: if isOwner(uid)
-        && request.resource.data.role in ['guru', 'siswa']
-        && request.resource.data.status == 'aktif';
-      allow update, delete: if isAdmin();
-    }
+function errText(e) {
+  const m = {
+    "auth/invalid-credential": "Email atau password salah.",
+    "auth/email-already-in-use": "Email ini sudah terdaftar. Silakan masuk.",
+    "auth/weak-password": "Password minimal 6 karakter.",
+    "auth/invalid-email": "Format email tidak valid.",
+    "auth/network-request-failed": "Tidak ada koneksi internet.",
+    "permission-denied": "Akses ditolak oleh aturan keamanan."
+  };
+  return m[e.code] || ("Terjadi kesalahan: " + (e.code || e.message));
+}
 
-    match /guru/{id} {
-      allow read: if isOwner(id) || isAdmin();
-      allow create: if isOwner(id)
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.status_verifikasi == 'menunggu';
-      allow update: if isAdmin()
-        || (isOwner(id)
-            && request.resource.data.status_verifikasi == resource.data.status_verifikasi
-            && request.resource.data.status == resource.data.status);
-      allow delete: if isAdmin();
-    }
+function authView(mode = "masuk") {
+  $("#hu").innerHTML = "";
+  const daftar = mode === "daftar";
+  root.innerHTML = `
+  <div class="card">
+    <h2>${daftar ? "Daftar akun baru" : "Masuk"}</h2>
+    <form id="f" novalidate>
+      ${daftar ? `
+      <label for="role">Saya mendaftar sebagai</label>
+      <select id="role"><option value="siswa">Siswa (atau orang tua siswa)</option><option value="guru">Guru</option></select>
+      <label for="nama">Nama lengkap</label><input id="nama" autocomplete="name">` : ""}
+      <label for="email">Email</label><input id="email" type="email" autocomplete="email">
+      <label for="pw">Password</label><input id="pw" type="password" autocomplete="${daftar ? "new-password" : "current-password"}">
+      ${daftar ? `<div id="extra"></div>` : ""}
+      <button type="submit">${daftar ? "Daftar" : "Masuk"}</button>
+      <div id="m" class="msg err" role="alert"></div>
+    </form>
+    <p class="msg">${daftar ? "Sudah punya akun?" : "Belum punya akun?"} <a href="#" id="sw">${daftar ? "Masuk" : "Daftar di sini"}</a></p>
+  </div>`;
+  $("#sw").onclick = (e) => { e.preventDefault(); authView(daftar ? "masuk" : "daftar"); };
+  if (daftar) {
+    const draw = () => {
+      $("#extra").innerHTML = $("#role").value === "guru"
+        ? `<label for="hp">No. HP</label><input id="hp" type="tel">`
+        : `<label for="pgl">Nama panggilan siswa</label><input id="pgl">
+           <label for="tl">Tanggal lahir siswa</label><input id="tl" type="date">
+           <label for="ortu">Nama orang tua</label><input id="ortu">
+           <label for="hpo">No. HP orang tua</label><input id="hpo" type="tel">
+           <label for="hps">No. HP siswa (boleh kosong)</label><input id="hps" type="tel">
+           <label for="almt">Alamat (boleh kosong)</label><input id="almt">`;
+    };
+    $("#role").onchange = draw; draw();
+  }
+  $("#f").onsubmit = async (e) => {
+    e.preventDefault();
+    const m = $("#m"); m.textContent = "";
+    const email = $("#email").value.trim(), pw = $("#pw").value;
+    try {
+      if (!daftar) { await signInWithEmailAndPassword(auth, email, pw); return; }
+      const role = $("#role").value, nama = $("#nama").value.trim();
+      if (!nama || !email || !pw) { m.textContent = "Nama, email, dan password wajib diisi."; return; }
+      let data;
+      if (role === "guru") {
+        const hp = $("#hp").value.trim();
+        if (!hp) { m.textContent = "No. HP wajib diisi."; return; }
+        data = { nama_lengkap: nama, no_hp: hp, program_diajarkan: [] };
+      } else {
+        const v = (id) => $("#" + id).value.trim();
+        if (!v("tl") || !v("ortu") || !v("hpo")) { m.textContent = "Tanggal lahir, nama orang tua, dan No. HP orang tua wajib diisi."; return; }
+        data = { nama_lengkap: nama, nama_panggilan: v("pgl"), tanggal_lahir: v("tl"), nama_orangtua: v("ortu"),
+                 no_hp_orangtua: v("hpo"), no_hp_siswa: v("hps"), alamat: v("almt"), catatan_khusus: "" };
+      }
+      busy = true;
+      const cred = await createUserWithEmailAndPassword(auth, email, pw);
+      const uid = cred.user.uid;
+      await setDoc(doc(db, "users", uid), { email, role, nama, status: "aktif", created_at: serverTimestamp() });
+      await setDoc(doc(db, role, uid), { ...data, uid, status_verifikasi: "menunggu", status: "aktif",
+        created_at: serverTimestamp(), updated_at: serverTimestamp() });
+      busy = false;
+      await showHome(cred.user);
+    } catch (err) { busy = false; m.textContent = errText(err); }
+  };
+}
 
-    match /siswa/{id} {
-      allow read: if isOwner(id) || isAdmin();
-      allow create: if isOwner(id)
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.status_verifikasi == 'menunggu';
-      allow update: if isAdmin()
-        || (isOwner(id)
-            && request.resource.data.diff(resource.data).affectedKeys()
-               .hasOnly(['no_hp_siswa', 'no_hp_orangtua', 'alamat', 'updated_at']));
-      allow delete: if isAdmin();
-    }
+function profileView(role, p) {
+  const f = role === "guru"
+    ? [["Nama lengkap", p.nama_lengkap], ["No. HP", p.no_hp]]
+    : [["Nama lengkap", p.nama_lengkap], ["Nama panggilan", p.nama_panggilan], ["Tanggal lahir", p.tanggal_lahir],
+       ["Nama orang tua", p.nama_orangtua], ["No. HP orang tua", p.no_hp_orangtua], ["No. HP siswa", p.no_hp_siswa], ["Alamat", p.alamat]];
+  const ok = p.status_verifikasi === "terverifikasi";
+  return `<details class="card sec" ${ok ? "" : "open"}><summary>Data saya · <span class="badge ${ok ? "done" : "wait"}">${ok ? "Terverifikasi" : "Menunggu verifikasi admin"}</span></summary>
+    <dl>${f.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v) || "-"}</dd>`).join("")}</dl></details>`;
+}
 
-    match /program/{id} {
-      allow read: if signedIn();
-      allow write: if isAdmin();
-    }
+const rp = (n) => "Rp " + Number(n || 0).toLocaleString("id-ID");
+function setHeader(nama, role) {
+  $("#hu").innerHTML = `<details class="um"><summary class="av" title="${esc(nama)}">${esc((nama || "?").trim().charAt(0).toUpperCase())}</summary>
+    <div class="menu"><strong>${esc(nama)}</strong><br><small style="color:var(--mute)">${esc(role)}</small><button id="out" class="alt sm">Keluar</button></div></details>`;
+}
+const topBar = (nama, role) => { setHeader(nama, role); return ""; };
+let adminTab = "verif";
+const HARI = ["minggu", "senin", "selasa", "rabu", "kamis", "jumat", "sabtu"];
+const pad = (n) => String(n).padStart(2, "0");
+const ymd = (d) => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const monday = (d) => addDays(d, -((d.getDay() + 6) % 7));
+const jamAkhir = (j, m) => { const [h, mi] = j.split(":").map(Number); const t = h * 60 + mi + m; return pad(Math.floor(t / 60) % 24) + ":" + pad(t % 60); };
+const tglLabel = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" }); };
+const gradeBadge = (s) => s ? `<span class="pill">${esc(s)}</span>` : "";
 
-    match /siswa_program/{id} {
-      allow read: if isAdmin() || party(resource.data);
-      allow write: if isAdmin();
-    }
-
-    match /pola_jadwal/{id} {
-      allow read: if isAdmin() || party(resource.data);
-      allow write: if isAdmin();
-    }
-
-    match /jadwal/{id} {
-      allow read: if isAdmin() || party(resource.data);
-      allow create: if isAdmin()
-        || (signedIn()
-            && request.resource.data.tipe in ['reschedule', 'pengganti']
-            && get(/databases/$(database)/documents/jadwal/$(request.resource.data.jadwal_asal_id)).data.guruId == request.auth.uid);
-      allow update: if isAdmin()
-        || (signedIn()
-            && resource.data.guruId == request.auth.uid
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updated_at'])
-            && request.resource.data.status in ['selesai', 'digantikan']);
-      allow delete: if isAdmin();
-    }
-
-    match /absensi/{id} {
-      allow read: if isAdmin() || party(resource.data);
-      allow create, update: if isAdmin()
-        || (ownsJadwal(id) && request.resource.data.guruId == request.auth.uid);
-      allow delete: if isAdmin();
-    }
-
-    match /catatan_les/{id} {
-      allow read: if isAdmin() || party(resource.data);
-      allow create, update: if isAdmin()
-        || (ownsJadwal(id) && request.resource.data.guruId == request.auth.uid);
-      allow delete: if isAdmin();
-    }
-
-    match /reschedule/{id} {
-      allow read: if isAdmin() || party(resource.data);
-      allow create: if isAdmin()
-        || (signedIn()
-            && request.resource.data.diajukan_oleh == request.auth.uid
-            && ((request.resource.data.siswaId == request.auth.uid && request.resource.data.status == 'menunggu')
-                || request.resource.data.guruId == request.auth.uid));
-      allow update: if isAdmin()
-        || (signedIn()
-            && resource.data.guruId == request.auth.uid
-            && request.resource.data.diff(resource.data).affectedKeys()
-               .hasOnly(['status', 'guru_pengganti_id', 'nama_guru_pengganti', 'tanggal_baru', 'jam_baru', 'disetujui_oleh', 'updated_at']));
-      allow delete: if isAdmin();
-    }
-
-    match /{document=**} {
-      allow read, write: if false;
+// generate sesi: durasi dari siswa_program.durasi_menit || program.durasi_default_menit || 45
+async function generate(polas, enrolls, programs) {
+  const progMap = Object.fromEntries(programs.map((p) => [p.id, p]));
+  const durOf = (p) => {
+    const e = enrolls.find((x) => x.siswaId === p.siswaId && x.programId === p.programId);
+    return Number(e?.durasi_menit) || Number(progMap[p.programId]?.durasi_default_menit) || 45;
+  };
+  const snapF = await getDocs(query(collection(db, "jadwal"), where("tanggal", ">=", ymd(new Date()))));
+  const have = new Set(snapF.docs.map((d) => d.id));
+  const libur = snapF.docs.filter((d) => { const x = d.data(); return x.tipe === "reguler" && x.status === "terjadwal" && Number(x.tanggal.slice(8)) >= 29; });
+  for (let i = 0; i < libur.length; i += 400) { const b = writeBatch(db); libur.slice(i, i + 400).forEach((d) => b.delete(d.ref)); await b.commit(); }
+  const endStr = ymd(addDays(new Date(), 90)), writes = [];
+  for (const p of polas.filter((x) => x.status === "aktif")) {
+    const hari = HARI.indexOf(p.hari);
+    for (let d = new Date(); ymd(d) <= endStr; d = addDays(d, 1)) {
+      const ds = ymd(d), id = p.id + "_" + ds;
+      if (d.getDay() !== hari || ds < p.tanggal_mulai || have.has(id) || d.getDate() >= 29) continue;
+      writes.push([id, { polaId: p.id, siswaId: p.siswaId, programId: p.programId, guruId: p.guruId, nama_siswa: p.nama_siswa,
+        nama_program: p.nama_program, nama_guru: p.nama_guru, tanggal: ds, jam_mulai: p.jam_mulai, durasi_menit: durOf(p),
+        tipe: "reguler", status: "terjadwal", created_at: serverTimestamp(), updated_at: serverTimestamp() }]);
     }
   }
+  for (let i = 0; i < writes.length; i += 400) {
+    const b = writeBatch(db);
+    writes.slice(i, i + 400).forEach(([id, x]) => b.set(doc(db, "jadwal", id), x));
+    await b.commit();
+  }
+  return writes.length;
+}
+
+async function closePola(p) {
+  const t = ymd(new Date());
+  await updateDoc(doc(db, "pola_jadwal", p.id), { status: "berhenti", updated_at: serverTimestamp() });
+  const s = await getDocs(query(collection(db, "jadwal"), where("polaId", "==", p.id)));
+  const b = writeBatch(db);
+  s.docs.filter((d) => d.data().tanggal >= t && d.data().status === "terjadwal")
+    .forEach((d) => b.update(d.ref, { status: "dibatalkan", updated_at: serverTimestamp() }));
+  await b.commit();
+}
+
+const STATUS_ABS = ["hadir", "tidak_hadir", "izin", "sakit", "reschedule"];
+
+function sesiBox(j, role, A, C, gurus) {
+  const t = ymd(new Date()), a = A[j.id], c = C[j.id], staff = role === "guru" || role === "admin";
+  const live = j.status !== "dibatalkan" && j.status !== "digantikan";
+  let o = a ? `<small>Absensi: <b>${esc(a.status)}</b>${c && c.materi ? " · Materi: " + esc(c.materi) : ""}</small>` : "";
+  if (staff && live && j.tanggal <= t) o += `<details><summary>${a ? "Ubah absensi" : "Isi absensi"}</summary><div class="ab" data-j="${j.id}">
+    <label>Status</label><select class="as">${STATUS_ABS.map((x) => `<option ${a && a.status === x ? "selected" : ""}>${x}</option>`).join("")}</select>
+    <label>Catatan (boleh kosong)</label><input class="ac" value="${esc(a && a.catatan)}">
+    <label>Materi yang diajarkan</label><textarea class="am" rows="2">${esc(c && c.materi)}</textarea>
+    <label>PR (boleh kosong)</label><textarea class="ap" rows="2">${esc(c && c.pr)}</textarea>
+    <label>Tenggat PR (boleh kosong)</label><input class="at" type="date" value="${esc(c && c.pr_tenggat)}">
+    <button class="sm" data-act="saveabs" data-id="${j.id}">Simpan absensi</button></div></details>`;
+  if (staff && j.status === "terjadwal" && j.tanggal >= t) o += `<details><summary>Pindah jadwal${role === "admin" ? " / ganti guru" : ""}</summary><div class="rs" data-j="${j.id}">
+    <label>Jenis</label><select class="rj"><option value="ganti_waktu">Ganti waktu</option>${role === "admin" ? `<option value="ganti_guru">Ganti guru</option>` : ""}</select>
+    ${role === "admin" ? `<label>Guru pengganti (jika ganti guru)</label><select class="rg">${gurus.map((g) => `<option value="${g.id}">${esc(g.nama_lengkap)}</option>`).join("")}</select>` : ""}
+    <label>Tanggal baru</label><input class="rd" type="date" value="${j.tanggal}"><label>Jam baru</label><input class="rt" type="time" value="${j.jam_mulai}">
+    <button class="sm" data-act="applyres" data-id="${j.id}">Terapkan</button></div></details>`;
+  if (role === "siswa" && j.status === "terjadwal" && j.tanggal > t) o += `<details><summary>Ajukan reschedule</summary><div class="rq" data-j="${j.id}">
+    <label>Yang diminta</label><select class="rj"><option value="ganti_waktu">Ganti waktu</option><option value="ganti_guru">Ganti guru</option></select>
+    <label>Alasan</label><input class="qa"><label>Usul tanggal baru (boleh kosong)</label><input class="rd" type="date"><label>Usul jam baru (boleh kosong)</label><input class="rt" type="time">
+    <button class="sm" data-act="reqres" data-id="${j.id}">Kirim pengajuan</button></div></details>`;
+  return o;
+}
+
+function reqCard(r, role, gurus) {
+  const open = r.status === "menunggu", proc = open && (role === "admin" || (role === "guru" && r.jenis === "ganti_waktu"));
+  const gl = gurus.filter((g) => g.id !== r.guruId && (g.program_diajarkan || []).includes(r.programId));
+  let o = `<div class="row" style="display:block"><div class="top"><strong>${esc(r.nama_siswa)}</strong><span class="badge ${r.status === "disetujui" ? "done" : (r.status === "ditolak" ? "bad" : "wait")}">${esc(r.status)}</span></div>
+    <small>${esc(r.nama_program)} · ${tglLabel(r.tanggal_asal)} ${esc(r.jam_asal)} · ${r.jenis === "ganti_guru" ? "minta ganti guru" : "minta ganti waktu"}${r.alasan ? " · " + esc(r.alasan) : ""}</small>`;
+  if (r.status === "disetujui") o += `<br><small>Jadwal baru: ${tglLabel(r.tanggal_baru)} ${esc(r.jam_baru)}${r.nama_guru_pengganti ? " · " + esc(r.nama_guru_pengganti) : ""}</small>`;
+  if (proc) o += `<details><summary>Proses</summary><div class="ap2" data-r="${r.id}">
+    ${role === "admin" && r.jenis === "ganti_guru" ? `<label>Guru pengganti</label><select class="rg">${(gl.length ? gl : gurus).map((g) => `<option value="${g.id}">${esc(g.nama_lengkap)}</option>`).join("")}</select>` : ""}
+    <label>Tanggal baru</label><input class="rd" type="date" value="${esc(r.tanggal_baru || r.tanggal_asal)}"><label>Jam baru</label><input class="rt" type="time" value="${esc(r.jam_baru || r.jam_asal)}">
+    <button class="sm" data-act="approve" data-id="${r.id}">Setujui</button> <button class="alt sm" data-act="reject" data-id="${r.id}">Tolak</button></div></details>`;
+  else if (open) o += `<br><small>Menunggu admin mencarikan guru pengganti.</small>`;
+  return o + "</div>";
+}
+
+async function applyResched(j, jenis, tgl, jam, g, uid, reqId) {
+  const u = serverTimestamp(), b = writeBatch(db);
+  b.set(doc(collection(db, "jadwal")), { siswaId: j.siswaId, programId: j.programId, guruId: g ? g.id : j.guruId, nama_siswa: j.nama_siswa,
+    nama_program: j.nama_program, nama_guru: g ? g.nama_lengkap : j.nama_guru, tanggal: tgl, jam_mulai: jam, durasi_menit: j.durasi_menit,
+    tipe: g ? "pengganti" : "reschedule", jadwal_asal_id: j.id, status: "terjadwal", created_at: u, updated_at: u });
+  b.update(doc(db, "jadwal", j.id), { status: "digantikan", updated_at: u });
+  const rd = { jenis, status: "disetujui", guru_pengganti_id: g ? g.id : "", nama_guru_pengganti: g ? g.nama_lengkap : "", tanggal_baru: tgl, jam_baru: jam, disetujui_oleh: uid, updated_at: u };
+  if (reqId) b.update(doc(db, "reschedule", reqId), rd);
+  else b.set(doc(collection(db, "reschedule")), { ...rd, jadwal_asal_id: j.id, siswaId: j.siswaId, guruId: j.guruId, programId: j.programId, nama_siswa: j.nama_siswa,
+    nama_program: j.nama_program, nama_guru: j.nama_guru, tanggal_asal: j.tanggal, jam_asal: j.jam_mulai, diajukan_oleh: uid, alasan: "", created_at: u });
+  await b.commit();
+}
+
+async function sesiAction(a, id, btn, ctx) {
+  const jd = async (jid) => ({ id: jid, ...(await getDoc(doc(db, "jadwal", jid))).data() });
+  const v = (box, s) => box.querySelector(s).value.trim();
+  const u = serverTimestamp();
+  if (a === "saveabs") {
+    const j = await jd(id), box = root.querySelector(`.ab[data-j="${id}"]`), b = writeBatch(db);
+    const base = { siswaId: j.siswaId, guruId: j.guruId, nama_siswa: j.nama_siswa, nama_program: j.nama_program, nama_guru: j.nama_guru, tanggal: j.tanggal };
+    b.set(doc(db, "absensi", id), { ...base, jadwalId: id, programId: j.programId, jam_mulai: j.jam_mulai, durasi_menit: j.durasi_menit,
+      status: v(box, ".as"), catatan: v(box, ".ac"), dicatat_oleh: ctx.user.uid, dicatat_pada: u });
+    const materi = v(box, ".am"), pr = v(box, ".ap");
+    if (materi || pr) b.set(doc(db, "catatan_les", id), { ...base, jadwalId: id, materi, pr, pr_tenggat: v(box, ".at"), updated_at: u });
+    if (j.status !== "selesai") b.update(doc(db, "jadwal", id), { status: "selesai", updated_at: u });
+    await b.commit(); return true;
+  }
+  if (a === "applyres") {
+    const box = root.querySelector(`.rs[data-j="${id}"]`), jenis = v(box, ".rj"), tgl = v(box, ".rd"), jam = v(box, ".rt");
+    const g = jenis === "ganti_guru" ? ctx.gurus.find((x) => x.id === box.querySelector(".rg").value) : null;
+    if (!tgl || !jam || (jenis === "ganti_guru" && !g)) { alert("Lengkapi tanggal, jam, dan guru pengganti."); return false; }
+    await applyResched(await jd(id), jenis, tgl, jam, g, ctx.user.uid); return true;
+  }
+  if (a === "reqres") {
+    const j = await jd(id), box = root.querySelector(`.rq[data-j="${id}"]`);
+    if (!v(box, ".qa")) { alert("Tulis alasan pengajuan."); return false; }
+    await addDoc(collection(db, "reschedule"), { jadwal_asal_id: id, siswaId: j.siswaId, guruId: j.guruId, programId: j.programId, nama_siswa: j.nama_siswa,
+      nama_program: j.nama_program, nama_guru: j.nama_guru, tanggal_asal: j.tanggal, jam_asal: j.jam_mulai, diajukan_oleh: ctx.user.uid, jenis: v(box, ".rj"),
+      alasan: v(box, ".qa"), status: "menunggu", guru_pengganti_id: "", nama_guru_pengganti: "", tanggal_baru: v(box, ".rd"), jam_baru: v(box, ".rt"), created_at: u, updated_at: u });
+    alert("Pengajuan terkirim."); return true;
+  }
+  if (a === "approve" || a === "reject") {
+    if (a === "reject") { await updateDoc(doc(db, "reschedule", id), { status: "ditolak", disetujui_oleh: ctx.user.uid, updated_at: u }); return true; }
+    const r = (await getDoc(doc(db, "reschedule", id))).data(), box = root.querySelector(`.ap2[data-r="${id}"]`);
+    const tgl = v(box, ".rd"), jam = v(box, ".rt");
+    const g = r.jenis === "ganti_guru" ? ctx.gurus.find((x) => x.id === box.querySelector(".rg").value) : null;
+    if (!tgl || !jam || (r.jenis === "ganti_guru" && !g)) { alert("Lengkapi tanggal, jam, dan guru pengganti."); return false; }
+    await applyResched(await jd(r.jadwal_asal_id), r.jenis, tgl, jam, g, ctx.user.uid, id); return true;
+  }
+  return false;
 }
