@@ -43,10 +43,20 @@ small{color:var(--mute)}
 .cel.sel{outline:3px solid var(--brand)}
 .chip{background:#e6e1fa;border-radius:4px;padding:1px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.7rem}
 .chip.more{background:var(--brand2)}
+header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px}
+header h1{font-size:1.05rem}
+.um{position:relative}
+.av{width:38px;height:38px;border-radius:50%;background:var(--brand2);color:var(--ink);display:flex;align-items:center;justify-content:center;font:700 1rem system-ui,sans-serif;cursor:pointer;list-style:none;margin:0}
+.av::-webkit-details-marker{display:none}
+.menu{position:absolute;right:0;top:46px;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:12px;min-width:180px;z-index:5;font-family:system-ui,sans-serif}
+.menu button{width:100%}
+.sec>summary{font-weight:600;cursor:pointer;color:var(--brand);font-family:system-ui,sans-serif}
+.sec[open]>summary{margin-bottom:10px}
+.cal.sm{min-width:0}.cal.sm .cel{min-height:56px;padding:3px}
 </style>
 </head>
 <body>
-<header><h1>SOLIDEO MUSIC COURSE</h1><small>Sistem manajemen sekolah musik</small></header>
+<header><h1>SOLIDEO MUSIC COURSE</h1><div id="hu"></div></header>
 <main id="app"><div class="card">Memuat…</div></main>
 
 <script type="module">
@@ -83,6 +93,7 @@ function errText(e) {
 }
 
 function authView(mode = "masuk") {
+  $("#hu").innerHTML = "";
   const daftar = mode === "daftar";
   root.innerHTML = `
   <div class="card">
@@ -151,14 +162,16 @@ function profileView(role, p) {
     : [["Nama lengkap", p.nama_lengkap], ["Nama panggilan", p.nama_panggilan], ["Tanggal lahir", p.tanggal_lahir],
        ["Nama orang tua", p.nama_orangtua], ["No. HP orang tua", p.no_hp_orangtua], ["No. HP siswa", p.no_hp_siswa], ["Alamat", p.alamat]];
   const ok = p.status_verifikasi === "terverifikasi";
-  return `<div class="card">
-    <div class="top"><h2>Data saya</h2><span class="badge ${ok ? "done" : "wait"}">${ok ? "Terverifikasi" : "Menunggu verifikasi admin"}</span></div>
-    <dl>${f.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v) || "-"}</dd>`).join("")}</dl>
-  </div>`;
+  return `<details class="card sec" ${ok ? "" : "open"}><summary>Data saya · <span class="badge ${ok ? "done" : "wait"}">${ok ? "Terverifikasi" : "Menunggu verifikasi admin"}</span></summary>
+    <dl>${f.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v) || "-"}</dd>`).join("")}</dl></details>`;
 }
 
 const rp = (n) => "Rp " + Number(n).toLocaleString("id-ID");
-const topBar = (nama, role) => `<div class="card top"><div><strong>${esc(nama)}</strong><br><small>${esc(role)}</small></div><button id="out" class="alt sm">Keluar</button></div>`;
+function setHeader(nama, role) {
+  $("#hu").innerHTML = `<details class="um"><summary class="av" title="${esc(nama)}">${esc((nama || "?").trim().charAt(0).toUpperCase())}</summary>
+    <div class="menu"><strong>${esc(nama)}</strong><br><small style="color:var(--mute)">${esc(role)}</small><button id="out" class="alt sm">Keluar</button></div></details>`;
+}
+const topBar = (nama, role) => { setHeader(nama, role); return ""; };
 let adminTab = "verif";
 const HARI = ["minggu", "senin", "selasa", "rabu", "kamis", "jumat", "sabtu"];
 const pad = (n) => String(n).padStart(2, "0");
@@ -171,13 +184,17 @@ let weekStart = monday(new Date()), guruFilter = "", calMode = "minggu", selDay 
 
 // Buat sesi 3 bulan ke depan dari pola aktif; sesi yang sudah ada tidak ditimpa
 async function generate(polas) {
-  const have = new Set((await getDocs(query(collection(db, "jadwal"), where("tanggal", ">=", ymd(new Date()))))).docs.map((d) => d.id));
+  const snapF = await getDocs(query(collection(db, "jadwal"), where("tanggal", ">=", ymd(new Date()))));
+  const have = new Set(snapF.docs.map((d) => d.id));
+  // bersihkan sesi reguler pertemuan ke-5 yang sudah terlanjur dibuat
+  const libur = snapF.docs.filter((d) => { const x = d.data(); return x.tipe === "reguler" && x.status === "terjadwal" && Number(x.tanggal.slice(8)) >= 29; });
+  for (let i = 0; i < libur.length; i += 400) { const b = writeBatch(db); libur.slice(i, i + 400).forEach((d) => b.delete(d.ref)); await b.commit(); }
   const endStr = ymd(addDays(new Date(), 90)), writes = [];
   for (const p of polas.filter((x) => x.status === "aktif")) {
     const hari = HARI.indexOf(p.hari);
     for (let d = new Date(); ymd(d) <= endStr; d = addDays(d, 1)) {
       const ds = ymd(d), id = p.id + "_" + ds;
-      if (d.getDay() !== hari || ds < p.tanggal_mulai || have.has(id)) continue;
+      if (d.getDay() !== hari || ds < p.tanggal_mulai || have.has(id) || d.getDate() >= 29) continue;
       writes.push([id, { polaId: p.id, siswaId: p.siswaId, programId: p.programId, guruId: p.guruId, nama_siswa: p.nama_siswa,
         nama_program: p.nama_program, nama_guru: p.nama_guru, tanggal: ds, jam_mulai: p.jam_mulai, durasi_menit: p.durasi_menit,
         tipe: "reguler", status: "terjadwal", created_at: serverTimestamp(), updated_at: serverTimestamp() }]);
@@ -295,245 +312,71 @@ async function sesiAction(a, id, btn, ctx) {
   return false;
 }
 
+let uMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1), uSel = ymd(new Date());
+const sec = (title, inner) => `<details class="card sec"><summary>${title}</summary>${inner}</details>`;
+
 async function userView(user, nama, role, p) {
   const fld = role === "guru" ? "guruId" : "siswaId", t = ymd(new Date());
   const ld = async (c) => (await getDocs(query(collection(db, c), where(fld, "==", user.uid)))).docs.map((d) => ({ id: d.id, ...d.data() }));
   const [es, js, ab, ct, rq] = await Promise.all(["siswa_program", "jadwal", "absensi", "catatan_les", "reschedule"].map(ld));
   const A = Object.fromEntries(ab.map((x) => [x.id, x])), C = Object.fromEntries(ct.map((x) => [x.id, x]));
   const key = (j) => j.tanggal + (j.jam_mulai || ""), asc = (a, b) => key(a).localeCompare(key(b)), desc = (a, b) => key(b).localeCompare(key(a));
-  const aktif = js.filter((j) => j.status === "terjadwal");
-  const todo = aktif.filter((j) => j.tanggal <= t).sort(asc);
-  const next = aktif.filter((j) => (role === "guru" ? j.tanggal > t : j.tanggal >= t)).sort(asc).slice(0, 10);
-  const done = js.filter((j) => j.status === "selesai").sort(desc).slice(0, 10);
-  const lst = (title, arr, empty) => `<div class="card"><h2>${title}</h2>${arr.map((j) => `<div class="row" style="display:block"><strong>${tglLabel(j.tanggal)}</strong> ${j.jam_mulai}–${jamAkhir(j.jam_mulai, j.durasi_menit)}<br>
-    <small>${esc(role === "guru" ? j.nama_siswa + " · " + j.nama_program : j.nama_program + " · " + j.nama_guru)}${j.tipe !== "reguler" ? " · " + esc(j.tipe) : ""}</small><br>${sesiBox(j, role, A, C, [])}</div>`).join("") || `<p class="msg">${empty}</p>`}</div>`;
+  const shown = js.filter((j) => j.status === "terjadwal" || j.status === "selesai");
+  const who = (j) => role === "guru" ? j.nama_siswa + " · " + j.nama_program : j.nama_program + " · " + j.nama_guru;
+  const jam = (j) => j.jam_mulai + "–" + jamAkhir(j.jam_mulai, j.durasi_menit);
+  const full = (j, showDate) => `<div class="row" style="display:block">${showDate ? `<strong>${tglLabel(j.tanggal)}</strong> ` : ""}<strong>${jam(j)}</strong> ${esc(who(j))}
+    ${j.tipe !== "reguler" ? `<small>(${esc(j.tipe)})</small>` : ""} <span class="badge ${j.status === "selesai" ? "done" : "wait"}">${esc(j.status)}</span><br>${sesiBox(j, role, A, C, [])}</div>`;
+  const mini = (j) => `<div class="row"><div><strong>${tglLabel(j.tanggal)}</strong> ${jam(j)}<br><small>${esc(who(j))}</small></div>${j.status === "selesai" ? `<span class="badge done">selesai</span>` : ""}</div>`;
   const reqs = rq.sort((a, b) => (b.created_at ? b.created_at.seconds : 0) - (a.created_at ? a.created_at.seconds : 0)).slice(0, 10);
-  const reqCardBox = `<div class="card"><h2>Pengajuan reschedule</h2>${reqs.map((r) => reqCard(r, role, [])).join("") || `<p class="msg">Belum ada.</p>`}</div>`;
-  const head = topBar(nama, role) + (p.exists() ? profileView(role, p.data()) : `<div class="card">Data profil belum ada. Hubungi admin.</div>`);
-  let main;
-  if (role === "guru") {
-    main = lst("Perlu diabsen", todo, "Semua sesi sudah diabsen.") + lst("Sesi mendatang", next, "Belum ada sesi.") + reqCardBox + lst("Absensi terbaru (bisa diubah)", done, "Belum ada.");
-  } else {
-    const cs = ct.sort(desc).slice(0, 10), as = ab.sort(desc).slice(0, 10);
-    main = lst("Jadwal saya", next, "Belum ada jadwal. Admin akan mengaturnya.") + reqCardBox
-      + `<div class="card"><h2>Catatan les dan PR</h2>${cs.map((c) => `<div class="row" style="display:block"><strong>${tglLabel(c.tanggal)}</strong><br><small>Materi: ${esc(c.materi) || "-"}<br>PR: ${esc(c.pr) || "-"}${c.pr_tenggat ? " (tenggat " + esc(c.pr_tenggat) + ")" : ""}</small></div>`).join("") || `<p class="msg">Belum ada catatan.</p>`}</div>`
-      + `<div class="card"><h2>Riwayat absensi</h2>${as.map((x) => `<div class="row"><span>${tglLabel(x.tanggal)} · ${esc(x.nama_program)}</span><span class="badge ${x.status === "hadir" ? "done" : "wait"}">${esc(x.status)}</span></div>`).join("") || `<p class="msg">Belum ada.</p>`}</div>`;
-  }
-  root.innerHTML = head + main + enrollCard(role, es);
-  $("#out").onclick = () => signOut(auth);
-  root.querySelectorAll("[data-act]").forEach((b) => b.onclick = async () => {
-    b.disabled = true;
-    try { if (await sesiAction(b.dataset.act, b.dataset.id, b, { user, role, gurus: [] })) await showHome(user); else b.disabled = false; }
-    catch (err) { b.disabled = false; alert(errText(err)); }
-  });
-}
 
-function enrollCard(role, list) {
-  const rows = list.map((e) => `<div class="row"><div><strong>${esc(role === "guru" ? e.nama_siswa : e.nama_program)}</strong><br>
-    <small>${role === "guru" ? esc(e.nama_program) : "Guru: " + esc(e.nama_guru)} · ${esc(e.grade_saat_ini) || "grade belum ditentukan"}</small></div>
-    <span class="badge ${e.status === "aktif" ? "done" : "wait"}">${esc(e.status)}</span></div>`).join("");
-  return `<div class="card"><h2>${role === "guru" ? "Siswa saya" : "Program saya"}</h2>${rows || `<p class="msg">Belum ada.</p>`}</div>`;
-}
-
-async function adminView(user, nama) {
-  const load = async (c) => (await getDocs(collection(db, c))).docs.map((d) => ({ id: d.id, ...d.data() }));
-  const [progs, gurus, siswas, ens, polas] = await Promise.all([load("program"), load("guru"), load("siswa"), load("siswa_program"), load("pola_jadwal")]);
-  const aktif = progs.filter((p) => p.status === "aktif");
-  const wait = (x) => x.status_verifikasi === "menunggu";
-  const badge = (x) => `<span class="badge ${wait(x) ? "wait" : "done"}">${wait(x) ? "Menunggu" : "Terverifikasi"}</span>`;
-  const gradesOf = (p) => p.grade_urutan || Object.keys(p.tarif_per_grade || {});
-  const tabs = [["verif", "Verifikasi"], ["program", "Program"], ["guru", "Guru"], ["siswa", "Siswa"], ["jadwal", "Jadwal"], ["resched", "Reschedule"]];
-  let body = "";
-
-  if (adminTab === "verif") {
-    const rows = (col, list) => list.filter(wait).map((x) => `<div class="row"><div><strong>${esc(x.nama_lengkap)}</strong><br>
-      <small>${col === "guru" ? esc(x.no_hp) : "Orang tua: " + esc(x.nama_orangtua) + " (" + esc(x.no_hp_orangtua) + ")"}</small></div>
-      <button class="sm" data-act="verif" data-col="${col}" data-id="${x.id}">Verifikasi</button></div>`).join("");
-    const g = rows("guru", gurus), s = rows("siswa", siswas);
-    body = `<div class="card"><h2>Guru menunggu verifikasi</h2>${g || `<p class="msg">Tidak ada.</p>`}</div>
-            <div class="card"><h2>Siswa menunggu verifikasi</h2>${s || `<p class="msg">Tidak ada.</p>`}</div>`;
-  }
-
-  if (adminTab === "program") {
-    body = `<div class="card"><h2>Tambah program</h2><form id="pf" novalidate>
-      <label for="pn">Nama program</label><input id="pn" placeholder="Piano Klasik">
-      <label for="pd">Durasi sesi (menit)</label><select id="pd"><option>30</option><option>45</option><option selected>60</option></select>
-      <label for="pt">Grade dan tarif per bulan (satu baris satu grade)</label>
-      <textarea id="pt" rows="5" placeholder="Pemula=250000&#10;Grade 1=300000&#10;Grade 2=350000"></textarea>
-      <button type="submit">Simpan program</button><div id="pm" class="msg err" role="alert"></div></form></div>`
-      + progs.map((p) => `<div class="card"><div class="top"><div><strong>${esc(p.nama)}</strong><br><small>${p.durasi_standar_menit} menit</small></div>
-        <button class="alt sm" data-act="toggleprog" data-id="${p.id}" data-to="${p.status === "aktif" ? "nonaktif" : "aktif"}">${p.status === "aktif" ? "Nonaktifkan" : "Aktifkan"}</button></div>
-        ${gradesOf(p).map((k) => `<div class="row"><span>${esc(k)}</span><span>${rp(p.tarif_per_grade[k])}</span></div>`).join("")}</div>`).join("");
-  }
-
-  if (adminTab === "guru") {
-    body = gurus.map((g) => `<div class="card"><div class="top"><strong>${esc(g.nama_lengkap)}</strong>${badge(g)}</div><small>${esc(g.no_hp)}</small>
-      <div data-g="${g.id}"><label>Program yang diajarkan</label>
-      ${aktif.map((p) => `<label class="chk"><input type="checkbox" value="${p.id}" ${(g.program_diajarkan || []).includes(p.id) ? "checked" : ""}> ${esc(p.nama)}</label>`).join("") || `<p class="msg">Buat program dulu di tab Program.</p>`}
-      <button class="sm" data-act="saveguru" data-id="${g.id}">Simpan</button></div></div>`).join("") || `<div class="card">Belum ada guru yang mendaftar.</div>`;
-  }
-
-  if (adminTab === "siswa") {
-    body = siswas.map((s) => {
-      const mine = ens.filter((e) => e.siswaId === s.id);
-      return `<div class="card"><div class="top"><strong>${esc(s.nama_lengkap)}</strong>${badge(s)}</div>
-      <small>Orang tua: ${esc(s.nama_orangtua)} (${esc(s.no_hp_orangtua)})</small>
-      ${mine.map((e) => {
-        const pol = polas.find((p) => p.status === "aktif" && p.siswaId === e.siswaId && p.programId === e.programId);
-        const dur = (progs.find((p) => p.id === e.programId) || {}).durasi_standar_menit || 60;
-        return `<div class="row"><div>${esc(e.nama_program)} · ${esc(e.nama_guru)}<br><small>${esc(e.grade_saat_ini) || "grade belum ditentukan"} · ${esc(e.status)}</small></div>
-        ${e.status === "aktif" ? `<button class="alt sm" data-act="stopenr" data-id="${e.id}">Hentikan</button>` : ""}</div>
-        ${e.status === "aktif" ? `<small style="text-transform:capitalize">Jadwal: ${pol ? esc(pol.hari) + " " + pol.jam_mulai + ", " + pol.durasi_menit + " menit" : "belum diatur"}</small>
-        <details><summary>${pol ? "Ubah jadwal" : "Atur jadwal"}</summary><div class="pf2" data-e="${e.id}">
-          <label>Hari</label><select class="ph">${["senin", "selasa", "rabu", "kamis", "jumat", "sabtu", "minggu"].map((x) => `<option>${x}</option>`).join("")}</select>
-          <label>Jam mulai</label><input class="pj" type="time">
-          <label>Durasi (menit)</label><select class="pd2">${[30, 45, 60, 90].map((x) => `<option ${x === dur ? "selected" : ""}>${x}</option>`).join("")}</select>
-          <button class="sm" data-act="setpola" data-id="${e.id}">Simpan jadwal</button></div></details>` : ""}`;
-      }).join("")}
-      <details><summary>Tambah program</summary><div class="enf" data-s="${s.id}">
-        <label>Program</label><select class="ep">${aktif.map((p) => `<option value="${p.id}">${esc(p.nama)}</option>`).join("")}</select>
-        <label>Guru</label><select class="eg"></select>
-        <label>Grade saat ini</label><select class="er"></select>
-        <button class="sm" data-act="addenr" data-id="${s.id}">Simpan</button></div></details></div>`;
-    }).join("") || `<div class="card">Belum ada siswa yang mendaftar.</div>`;
-  }
-
-  if (adminTab === "resched") {
-    const rq = (await load("reschedule")).sort((a, b) => (b.created_at ? b.created_at.seconds : 0) - (a.created_at ? a.created_at.seconds : 0));
-    const o = rq.filter((r) => r.status === "menunggu"), rest = rq.filter((r) => r.status !== "menunggu").slice(0, 15);
-    body = `<div class="card"><h2>Menunggu (${o.length})</h2>${o.map((r) => reqCard(r, "admin", gurus)).join("") || `<p class="msg">Tidak ada pengajuan.</p>`}</div>
-      <div class="card"><h2>Riwayat</h2>${rest.map((r) => reqCard(r, "admin", gurus)).join("") || `<p class="msg">Belum ada.</p>`}</div>`;
-  }
-
-  if (adminTab === "jadwal") {
-    const made = await generate(polas);
-    const mon = calMode === "bulan", today = ymd(new Date());
-    let from = weekStart, to = addDays(weekStart, 6);
-    if (mon) {
-      const f = new Date(weekStart.getFullYear(), weekStart.getMonth(), 1), l = new Date(f.getFullYear(), f.getMonth() + 1, 0);
-      from = monday(f); to = addDays(monday(l), 6);
-    }
-    const snap = await getDocs(query(collection(db, "jadwal"), where("tanggal", ">=", ymd(from)), where("tanggal", "<=", ymd(to))));
-    const js = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((j) => !guruFilter || j.guruId === guruFilter);
-    const days = []; for (let d = from; d <= to; d = addDays(d, 1)) days.push(ymd(d));
-    if (!days.includes(selDay)) selDay = days.includes(today) ? today : days[0];
-    const cur = weekStart.getMonth();
-    const title = mon ? weekStart.toLocaleDateString("id-ID", { month: "long", year: "numeric" }) : tglLabel(ymd(from)) + " – " + tglLabel(ymd(to));
+  const draw = () => {
+    const wk0 = monday(new Date()), w0 = ymd(wk0), w1 = ymd(addDays(wk0, 6));
+    const hari = js.filter((j) => j.tanggal === t && j.status !== "dibatalkan" && j.status !== "digantikan").sort(asc);
+    const late = role === "guru" ? js.filter((j) => j.tanggal < t && j.status === "terjadwal").sort(asc) : [];
+    const minggu = shown.filter((j) => j.tanggal >= w0 && j.tanggal <= w1).sort(asc);
+    const f = uMonth, l = new Date(f.getFullYear(), f.getMonth() + 1, 0), days = [];
+    for (let d = monday(f); d <= addDays(monday(l), 6); d = addDays(d, 1)) days.push(ymd(d));
     const cell = (ds) => {
-      const items = js.filter((j) => j.tanggal === ds && j.status === "terjadwal").sort((a, b) => a.jam_mulai.localeCompare(b.jam_mulai));
-      const max = mon ? 2 : 6, [, m, d] = ds.split("-").map(Number);
-      return `<button class="cel ${ds === selDay ? "sel" : ""} ${ds === today ? "today" : ""} ${mon && m - 1 !== cur ? "out" : ""}" data-day="${ds}"><b>${d}</b>
-        ${items.slice(0, max).map((j) => `<span class="chip">${j.jam_mulai} ${esc((j.nama_siswa || "").split(" ")[0])}</span>`).join("")}
-        ${items.length > max ? `<span class="chip more">+${items.length - max}</span>` : ""}</button>`;
+      const it = shown.filter((j) => j.tanggal === ds).sort(asc), m = Number(ds.slice(5, 7)), d = Number(ds.slice(8));
+      return `<button class="cel ${ds === uSel ? "sel" : ""} ${ds === t ? "today" : ""} ${m - 1 !== f.getMonth() ? "out" : ""}" data-ud="${ds}"><b>${d}</b>
+        ${it.slice(0, 2).map((j) => `<span class="chip">${j.jam_mulai}</span>`).join("")}${it.length > 2 ? `<span class="chip more">+${it.length - 2}</span>` : ""}</button>`;
     };
-    const [ab, ct] = await Promise.all(["absensi", "catatan_les"].map(async (c) => (await getDocs(query(collection(db, c), where("tanggal", "==", selDay)))).docs.map((d) => ({ id: d.id, ...d.data() }))));
-    const A = Object.fromEntries(ab.map((x) => [x.id, x])), C = Object.fromEntries(ct.map((x) => [x.id, x]));
-    const dayItems = js.filter((j) => j.tanggal === selDay).sort((a, b) => a.jam_mulai.localeCompare(b.jam_mulai));
-    body = `<div class="card"><div class="tabs"><button data-mode="minggu" class="${mon ? "" : "on"}">Mingguan</button><button data-mode="bulan" class="${mon ? "on" : ""}">Bulanan</button></div>
-      <div class="top"><button class="alt sm" data-wk="-1">‹</button><button class="alt sm" data-wk="0">Hari ini</button><button class="alt sm" data-wk="1">›</button></div>
-      <h2 style="margin-top:12px">${esc(title)}</h2>
-      <label for="gf">Tampilkan guru</label><select id="gf"><option value="">Semua guru</option>${gurus.map((g) => `<option value="${g.id}" ${guruFilter === g.id ? "selected" : ""}>${esc(g.nama_lengkap)}</option>`).join("")}</select>
-      ${made ? `<p class="msg ok">${made} sesi baru dibuat otomatis.</p>` : ""}</div>
-      <div class="card scroll"><div class="cal">${["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].map((x) => `<div class="dh">${x}</div>`).join("")}${days.map(cell).join("")}</div></div>
-      <div class="card"><h2>${tglLabel(selDay)}</h2>${dayItems.map((j) => `<div class="row"><div><strong>${j.jam_mulai}–${jamAkhir(j.jam_mulai, j.durasi_menit)}</strong> ${esc(j.nama_siswa)}<br>
-        <small>${esc(j.nama_program)} · ${esc(j.nama_guru)} · <span class="badge ${j.status === "terjadwal" ? "done" : "wait"}">${esc(j.status)}</span></small></div>
-        ${j.status === "terjadwal" ? `<button class="alt sm" data-act="cancel" data-id="${j.id}">Batalkan</button>` : ""}</div>${sesiBox(j, "admin", A, C, gurus)}`).join("") || `<p class="msg">Tidak ada sesi.</p>`}</div>`;
-  }
-
-  root.innerHTML = topBar(nama, "admin")
-    + `<div class="tabs">${tabs.map(([k, t]) => `<button data-tab="${k}" class="${adminTab === k ? "on" : ""}">${t}</button>`).join("")}</div>` + body;
-  $("#out").onclick = () => signOut(auth);
-  const again = () => showHome(user);
-  const nowD = new Date();
-  root.querySelectorAll("[data-wk]").forEach((b) => b.onclick = () => {
-    const v = Number(b.dataset.wk), bln = calMode === "bulan";
-    if (v === 0) { weekStart = bln ? new Date(nowD.getFullYear(), nowD.getMonth(), 1) : monday(nowD); selDay = ymd(nowD); }
-    else weekStart = bln ? new Date(weekStart.getFullYear(), weekStart.getMonth() + v, 1) : addDays(weekStart, 7 * v);
-    again();
-  });
-  root.querySelectorAll("[data-mode]").forEach((b) => b.onclick = () => {
-    calMode = b.dataset.mode; weekStart = calMode === "bulan" ? new Date(nowD.getFullYear(), nowD.getMonth(), 1) : monday(nowD); again();
-  });
-  root.querySelectorAll("[data-day]").forEach((b) => b.onclick = () => { selDay = b.dataset.day; again(); });
-  const gf = $("#gf"); if (gf) gf.onchange = () => { guruFilter = gf.value; again(); };
-  root.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { adminTab = b.dataset.tab; again(); });
-
-  // isi pilihan guru dan grade sesuai program
-  root.querySelectorAll(".enf").forEach((box) => {
-    const fill = () => {
-      const p = progs.find((x) => x.id === box.querySelector(".ep").value);
-      const gs = p ? gurus.filter((g) => (g.program_diajarkan || []).includes(p.id)) : [];
-      box.querySelector(".eg").innerHTML = gs.map((g) => `<option value="${g.id}">${esc(g.nama_lengkap)}</option>`).join("") || `<option value="">Belum ada guru untuk program ini</option>`;
-      box.querySelector(".er").innerHTML = `<option value="">Belum ditentukan</option>` + (p ? gradesOf(p).map((k) => `<option>${esc(k)}</option>`).join("") : "");
-    };
-    box.querySelector(".ep").onchange = fill; fill();
-  });
-
-  const pf = $("#pf");
-  if (pf) pf.onsubmit = async (e) => {
-    e.preventDefault();
-    const m = $("#pm"); m.textContent = "";
-    const nm = $("#pn").value.trim();
-    const tarif = {}, urutan = [];
-    for (const line of $("#pt").value.split("\n").map((l) => l.trim()).filter(Boolean)) {
-      const i = line.lastIndexOf("=");
-      const k = line.slice(0, i).trim(), v = Number(line.slice(i + 1).replace(/\D/g, ""));
-      if (i < 1 || !k || !v) { m.textContent = `Baris "${line}" salah. Tulis seperti: Grade 1=300000`; return; }
-      tarif[k] = v; urutan.push(k);
+    const sel = js.filter((j) => j.tanggal === uSel).sort(asc);
+    const hariCard = `<div class="card"><h2>Hari ini</h2><small>${tglLabel(t)}</small>
+      ${late.length ? `<p class="msg err">${late.length} sesi sebelumnya belum diabsen:</p>${late.map((j) => full(j, true)).join("")}` : ""}
+      ${hari.map((j) => full(j)).join("") || `<p class="msg">Tidak ada kelas hari ini.</p>`}</div>`;
+    const mingguCard = `<div class="card"><h2>Minggu ini</h2>${minggu.map(mini).join("") || `<p class="msg">Tidak ada kelas minggu ini.</p>`}</div>`;
+    const kal = `<div class="card"><div class="top"><button class="alt sm" data-um="-1">‹</button><h2 style="margin:0">${f.toLocaleDateString("id-ID", { month: "long", year: "numeric" })}</h2><button class="alt sm" data-um="1">›</button></div>
+      <div class="cal sm" style="margin-top:12px">${["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].map((x) => `<div class="dh">${x}</div>`).join("")}${days.map(cell).join("")}</div>
+      <p class="msg"><button class="alt sm" data-um="0">Bulan ini</button> Klik tanggal untuk melihat detail.</p></div>`;
+    const detail = `<div class="card"><h2>${tglLabel(uSel)}</h2>${sel.map((j) => full(j)).join("") || `<p class="msg">Tidak ada kelas.</p>`}</div>`;
+    let more = sec("Pengajuan reschedule", reqs.map((r) => reqCard(r, role, [])).join("") || `<p class="msg">Belum ada.</p>`);
+    if (role === "siswa") {
+      more += sec("Catatan les dan PR", ct.sort(desc).slice(0, 10).map((c) => `<div class="row" style="display:block"><strong>${tglLabel(c.tanggal)}</strong><br><small>Materi: ${esc(c.materi) || "-"}<br>PR: ${esc(c.pr) || "-"}${c.pr_tenggat ? " (tenggat " + esc(c.pr_tenggat) + ")" : ""}</small></div>`).join("") || `<p class="msg">Belum ada catatan.</p>`)
+        + sec("Riwayat absensi", ab.sort(desc).slice(0, 10).map((x) => `<div class="row"><span>${tglLabel(x.tanggal)} · ${esc(x.nama_program)}</span><span class="badge ${x.status === "hadir" ? "done" : "wait"}">${esc(x.status)}</span></div>`).join("") || `<p class="msg">Belum ada.</p>`);
     }
-    if (!nm || !urutan.length) { m.textContent = "Nama program dan minimal satu grade wajib diisi."; return; }
-    try {
-      await addDoc(collection(db, "program"), { nama: nm, durasi_standar_menit: Number($("#pd").value), tarif_per_grade: tarif, grade_urutan: urutan, status: "aktif" });
-      again();
-    } catch (err) { m.textContent = errText(err); }
+    more += sec(role === "guru" ? "Siswa saya" : "Program saya", enrollCard(role, es));
+    root.innerHTML = topBar(nama, role) + hariCard + mingguCard + kal + detail + (p.exists() ? profileView(role, p.data()) : "") + more;
+    $("#out").onclick = () => signOut(auth);
+    root.querySelectorAll("[data-um]").forEach((b) => b.onclick = () => {
+      const v = Number(b.dataset.um), n = new Date();
+      uMonth = v === 0 ? new Date(n.getFullYear(), n.getMonth(), 1) : new Date(uMonth.getFullYear(), uMonth.getMonth() + v, 1);
+      if (v === 0) uSel = t;
+      draw();
+    });
+    root.querySelectorAll("[data-ud]").forEach((b) => b.onclick = () => { uSel = b.dataset.ud; draw(); });
+    root.querySelectorAll("[data-act]").forEach((b) => b.onclick = async () => {
+      b.disabled = true;
+      try { if (await sesiAction(b.dataset.act, b.dataset.id, b, { user, role, gurus: [] })) await showHome(user); else b.disabled = false; }
+      catch (err) { b.disabled = false; alert(errText(err)); }
+    });
   };
-
-  root.querySelectorAll("[data-act]").forEach((b) => b.onclick = async () => {
-    const a = b.dataset.act, id = b.dataset.id;
-    b.disabled = true;
-    try {
-      if (["saveabs", "applyres", "approve", "reject"].includes(a) && !(await sesiAction(a, id, b, { user, role: "admin", gurus }))) { b.disabled = false; return; }
-      if (a === "verif") await updateDoc(doc(db, b.dataset.col, id), { status_verifikasi: "terverifikasi", updated_at: serverTimestamp() });
-      if (a === "toggleprog") await updateDoc(doc(db, "program", id), { status: b.dataset.to });
-      if (a === "stopenr") {
-        const e = ens.find((x) => x.id === id);
-        await updateDoc(doc(db, "siswa_program", id), { status: "berhenti", updated_at: serverTimestamp() });
-        const old = polas.find((p) => p.status === "aktif" && p.siswaId === e.siswaId && p.programId === e.programId);
-        if (old) await closePola(old);
-      }
-      if (a === "cancel") await updateDoc(doc(db, "jadwal", id), { status: "dibatalkan", updated_at: serverTimestamp() });
-      if (a === "setpola") {
-        const e = ens.find((x) => x.id === id), box = root.querySelector(`.pf2[data-e="${id}"]`), jam = box.querySelector(".pj").value;
-        if (!jam) { alert("Isi jam mulai."); b.disabled = false; return; }
-        const old = polas.find((p) => p.status === "aktif" && p.siswaId === e.siswaId && p.programId === e.programId);
-        if (old) await closePola(old);
-        const np = { siswaId: e.siswaId, programId: e.programId, guruId: e.guruId, nama_siswa: e.nama_siswa, nama_program: e.nama_program, nama_guru: e.nama_guru,
-          hari: box.querySelector(".ph").value, jam_mulai: jam, durasi_menit: Number(box.querySelector(".pd2").value),
-          tanggal_mulai: ymd(new Date()), status: "aktif", created_at: serverTimestamp(), updated_at: serverTimestamp() };
-        const ref = await addDoc(collection(db, "pola_jadwal"), np);
-        await generate([{ id: ref.id, ...np }]);
-      }
-      if (a === "saveguru") {
-        const ids = [...root.querySelectorAll(`[data-g="${id}"] input:checked`)].map((i) => i.value);
-        await updateDoc(doc(db, "guru", id), { program_diajarkan: ids, updated_at: serverTimestamp() });
-      }
-      if (a === "addenr") {
-        const box = root.querySelector(`.enf[data-s="${id}"]`);
-        const p = progs.find((x) => x.id === box.querySelector(".ep").value);
-        const g = gurus.find((x) => x.id === box.querySelector(".eg").value);
-        const s = siswas.find((x) => x.id === id);
-        if (!p || !g) { alert("Pilih program dan guru. Guru harus diatur dulu di tab Guru."); b.disabled = false; return; }
-        await addDoc(collection(db, "siswa_program"), { siswaId: id, programId: p.id, guruId: g.id, nama_siswa: s.nama_lengkap, nama_program: p.nama,
-          nama_guru: g.nama_lengkap, grade_saat_ini: box.querySelector(".er").value, status: "aktif",
-          tanggal_mulai: new Date().toISOString().slice(0, 10), updated_at: serverTimestamp() });
-      }
-      again();
-    } catch (err) { b.disabled = false; alert(errText(err)); }
-  });
+  draw();
 }
 
 async function showHome(user) {
   if (busy) return;
+  $("#hu").innerHTML = "";
   root.innerHTML = `<div class="card">Memuat…</div>`;
   try {
     const u = await getDoc(doc(db, "users", user.uid));
