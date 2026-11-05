@@ -33,6 +33,16 @@ dl{margin:0;font-family:system-ui,sans-serif}dt{color:var(--mute);font-size:.85r
 .chk{display:flex;gap:8px;align-items:center;font-weight:400}.chk input{width:auto}
 details{margin-top:10px;font-family:system-ui,sans-serif}summary{cursor:pointer;color:var(--brand);font-weight:600}
 small{color:var(--mute)}
+.scroll{overflow-x:auto}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;min-width:560px}
+.dh{text-align:center;font:600 .8rem system-ui,sans-serif;color:var(--mute);padding:4px}
+.cel{margin:0;min-height:76px;padding:4px;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:6px;font:400 .75rem system-ui,sans-serif;text-align:left;display:flex;flex-direction:column;gap:2px;align-items:stretch}
+.cel b{font-size:.85rem}
+.cel.out{background:#f1eef8;color:var(--mute)}
+.cel.today{border:2px solid var(--brand2)}
+.cel.sel{outline:3px solid var(--brand)}
+.chip{background:#e6e1fa;border-radius:4px;padding:1px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.7rem}
+.chip.more{background:var(--brand2)}
 </style>
 </head>
 <body>
@@ -157,7 +167,7 @@ const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 
 const monday = (d) => addDays(d, -((d.getDay() + 6) % 7));
 const jamAkhir = (j, m) => { const [h, mi] = j.split(":").map(Number); const t = h * 60 + mi + m; return pad(Math.floor(t / 60) % 24) + ":" + pad(t % 60); };
 const tglLabel = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" }); };
-let weekStart = monday(new Date()), guruFilter = "";
+let weekStart = monday(new Date()), guruFilter = "", calMode = "minggu", selDay = ymd(new Date());
 
 // Buat sesi 3 bulan ke depan dari pola aktif; sesi yang sudah ada tidak ditimpa
 async function generate(polas) {
@@ -272,26 +282,52 @@ async function adminView(user, nama) {
 
   if (adminTab === "jadwal") {
     const made = await generate(polas);
-    const ws = ymd(weekStart), we = ymd(addDays(weekStart, 6));
-    const snap = await getDocs(query(collection(db, "jadwal"), where("tanggal", ">=", ws), where("tanggal", "<=", we)));
+    const mon = calMode === "bulan", today = ymd(new Date());
+    let from = weekStart, to = addDays(weekStart, 6);
+    if (mon) {
+      const f = new Date(weekStart.getFullYear(), weekStart.getMonth(), 1), l = new Date(f.getFullYear(), f.getMonth() + 1, 0);
+      from = monday(f); to = addDays(monday(l), 6);
+    }
+    const snap = await getDocs(query(collection(db, "jadwal"), where("tanggal", ">=", ymd(from)), where("tanggal", "<=", ymd(to))));
     const js = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((j) => !guruFilter || j.guruId === guruFilter);
-    body = `<div class="card"><div class="top"><button class="alt sm" data-wk="-1">‹ Sebelumnya</button><button class="alt sm" data-wk="0">Minggu ini</button><button class="alt sm" data-wk="1">Berikutnya ›</button></div>
-      <p class="msg">${tglLabel(ws)} sampai ${tglLabel(we)}</p>
+    const days = []; for (let d = from; d <= to; d = addDays(d, 1)) days.push(ymd(d));
+    if (!days.includes(selDay)) selDay = days.includes(today) ? today : days[0];
+    const cur = weekStart.getMonth();
+    const title = mon ? weekStart.toLocaleDateString("id-ID", { month: "long", year: "numeric" }) : tglLabel(ymd(from)) + " – " + tglLabel(ymd(to));
+    const cell = (ds) => {
+      const items = js.filter((j) => j.tanggal === ds && j.status === "terjadwal").sort((a, b) => a.jam_mulai.localeCompare(b.jam_mulai));
+      const max = mon ? 2 : 6, [, m, d] = ds.split("-").map(Number);
+      return `<button class="cel ${ds === selDay ? "sel" : ""} ${ds === today ? "today" : ""} ${mon && m - 1 !== cur ? "out" : ""}" data-day="${ds}"><b>${d}</b>
+        ${items.slice(0, max).map((j) => `<span class="chip">${j.jam_mulai} ${esc((j.nama_siswa || "").split(" ")[0])}</span>`).join("")}
+        ${items.length > max ? `<span class="chip more">+${items.length - max}</span>` : ""}</button>`;
+    };
+    const dayItems = js.filter((j) => j.tanggal === selDay).sort((a, b) => a.jam_mulai.localeCompare(b.jam_mulai));
+    body = `<div class="card"><div class="tabs"><button data-mode="minggu" class="${mon ? "" : "on"}">Mingguan</button><button data-mode="bulan" class="${mon ? "on" : ""}">Bulanan</button></div>
+      <div class="top"><button class="alt sm" data-wk="-1">‹</button><button class="alt sm" data-wk="0">Hari ini</button><button class="alt sm" data-wk="1">›</button></div>
+      <h2 style="margin-top:12px">${esc(title)}</h2>
       <label for="gf">Tampilkan guru</label><select id="gf"><option value="">Semua guru</option>${gurus.map((g) => `<option value="${g.id}" ${guruFilter === g.id ? "selected" : ""}>${esc(g.nama_lengkap)}</option>`).join("")}</select>
-      ${made ? `<p class="msg ok">${made} sesi baru dibuat otomatis.</p>` : ""}</div>`
-      + Array.from({ length: 7 }, (_, i) => ymd(addDays(weekStart, i))).map((ds) => {
-        const items = js.filter((j) => j.tanggal === ds).sort((a, b) => a.jam_mulai.localeCompare(b.jam_mulai));
-        return `<div class="card"><h2>${tglLabel(ds)}</h2>` + (items.map((j) => `<div class="row"><div><strong>${j.jam_mulai}–${jamAkhir(j.jam_mulai, j.durasi_menit)}</strong> ${esc(j.nama_siswa)}<br>
-          <small>${esc(j.nama_program)} · ${esc(j.nama_guru)} · <span class="badge ${j.status === "terjadwal" ? "done" : "wait"}">${esc(j.status)}</span></small></div>
-          ${j.status === "terjadwal" ? `<button class="alt sm" data-act="cancel" data-id="${j.id}">Batalkan</button>` : ""}</div>`).join("") || `<p class="msg">Tidak ada sesi.</p>`) + `</div>`;
-      }).join("");
+      ${made ? `<p class="msg ok">${made} sesi baru dibuat otomatis.</p>` : ""}</div>
+      <div class="card scroll"><div class="cal">${["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].map((x) => `<div class="dh">${x}</div>`).join("")}${days.map(cell).join("")}</div></div>
+      <div class="card"><h2>${tglLabel(selDay)}</h2>${dayItems.map((j) => `<div class="row"><div><strong>${j.jam_mulai}–${jamAkhir(j.jam_mulai, j.durasi_menit)}</strong> ${esc(j.nama_siswa)}<br>
+        <small>${esc(j.nama_program)} · ${esc(j.nama_guru)} · <span class="badge ${j.status === "terjadwal" ? "done" : "wait"}">${esc(j.status)}</span></small></div>
+        ${j.status === "terjadwal" ? `<button class="alt sm" data-act="cancel" data-id="${j.id}">Batalkan</button>` : ""}</div>`).join("") || `<p class="msg">Tidak ada sesi.</p>`}</div>`;
   }
 
   root.innerHTML = topBar(nama, "admin")
     + `<div class="tabs">${tabs.map(([k, t]) => `<button data-tab="${k}" class="${adminTab === k ? "on" : ""}">${t}</button>`).join("")}</div>` + body;
   $("#out").onclick = () => signOut(auth);
   const again = () => showHome(user);
-  root.querySelectorAll("[data-wk]").forEach((b) => b.onclick = () => { const v = Number(b.dataset.wk); weekStart = v === 0 ? monday(new Date()) : addDays(weekStart, 7 * v); again(); });
+  const nowD = new Date();
+  root.querySelectorAll("[data-wk]").forEach((b) => b.onclick = () => {
+    const v = Number(b.dataset.wk), bln = calMode === "bulan";
+    if (v === 0) { weekStart = bln ? new Date(nowD.getFullYear(), nowD.getMonth(), 1) : monday(nowD); selDay = ymd(nowD); }
+    else weekStart = bln ? new Date(weekStart.getFullYear(), weekStart.getMonth() + v, 1) : addDays(weekStart, 7 * v);
+    again();
+  });
+  root.querySelectorAll("[data-mode]").forEach((b) => b.onclick = () => {
+    calMode = b.dataset.mode; weekStart = calMode === "bulan" ? new Date(nowD.getFullYear(), nowD.getMonth(), 1) : monday(nowD); again();
+  });
+  root.querySelectorAll("[data-day]").forEach((b) => b.onclick = () => { selDay = b.dataset.day; again(); });
   const gf = $("#gf"); if (gf) gf.onchange = () => { guruFilter = gf.value; again(); };
   root.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { adminTab = b.dataset.tab; again(); });
 
