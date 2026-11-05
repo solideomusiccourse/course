@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SOLIDEO MUSIC COURSE</title>
+<style>
+:root{--ink:#1d1b2e;--mute:#6b6880;--bg:#f6f4fb;--card:#fff;--line:#e2deee;--brand:#3b2a8c;--brand2:#e8b53a;--ok:#1f7a4d;--err:#b3261e}
+*{box-sizing:border-box}
+body{margin:0;font-family:Georgia,"Times New Roman",serif;background:var(--bg);color:var(--ink);line-height:1.5}
+header{background:var(--brand);color:#fff;padding:18px 20px;border-bottom:4px solid var(--brand2)}
+header h1{margin:0;font-size:1.25rem;letter-spacing:.04em}
+header small{color:#d6d0f5;font-family:system-ui,sans-serif}
+main{max-width:640px;margin:0 auto;padding:20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:20px;margin-bottom:16px}
+h2{margin:0 0 12px;font-size:1.2rem}
+label{display:block;margin:12px 0 4px;font:600 .9rem system-ui,sans-serif}
+input,select,textarea{width:100%;padding:11px;border:1px solid #bdb8d4;border-radius:6px;font:1rem system-ui,sans-serif;background:#fff}
+input:focus,select:focus,button:focus-visible{outline:3px solid var(--brand2);outline-offset:1px}
+button{font:600 1rem system-ui,sans-serif;border:0;border-radius:6px;padding:11px 18px;cursor:pointer;background:var(--brand);color:#fff;margin-top:16px}
+button.alt{background:#fff;color:var(--brand);border:1px solid var(--brand)}
+button.sm{margin:0;padding:7px 12px;font-size:.9rem}
+.msg{margin-top:12px;font:.95rem system-ui,sans-serif}.err{color:var(--err)}.ok{color:var(--ok)}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line);font-family:system-ui,sans-serif}
+.row:first-of-type{border-top:0}
+.badge{display:inline-block;padding:2px 10px;border-radius:99px;font:600 .8rem system-ui,sans-serif}
+.wait{background:#fdf0cf;color:#7a5a00}.done{background:#d9f2e4;color:var(--ok)}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+dl{margin:0;font-family:system-ui,sans-serif}dt{color:var(--mute);font-size:.85rem;margin-top:10px}dd{margin:0}
+</style>
+</head>
+<body>
+<header><h1>SOLIDEO MUSIC COURSE</h1><small>Sistem manajemen sekolah musik</small></header>
+<main id="app"><div class="card">Memuat…</div></main>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBzkDez2oSiD6dkpOpn4oHw6GM5E3ioZpk",
+  authDomain: "solideo-music-course.firebaseapp.com",
+  projectId: "solideo-music-course",
+  storageBucket: "solideo-music-course.firebasestorage.app",
+  messagingSenderId: "905695709090",
+  appId: "1:905695709090:web:5f75bd671c499e6db414fb"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const $ = (s) => document.querySelector(s);
+const root = $("#app");
+const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+let busy = false; // true saat proses daftar berlangsung
+
+function errText(e) {
+  const m = {
+    "auth/invalid-credential": "Email atau password salah.",
+    "auth/email-already-in-use": "Email ini sudah terdaftar. Silakan masuk.",
+    "auth/weak-password": "Password minimal 6 karakter.",
+    "auth/invalid-email": "Format email tidak valid.",
+    "auth/network-request-failed": "Tidak ada koneksi internet.",
+    "permission-denied": "Akses ditolak oleh aturan keamanan."
+  };
+  return m[e.code] || ("Terjadi kesalahan: " + (e.code || e.message));
+}
+
+function authView(mode = "masuk") {
+  const daftar = mode === "daftar";
+  root.innerHTML = `
+  <div class="card">
+    <h2>${daftar ? "Daftar akun baru" : "Masuk"}</h2>
+    <form id="f" novalidate>
+      ${daftar ? `
+      <label for="role">Saya mendaftar sebagai</label>
+      <select id="role"><option value="siswa">Siswa (atau orang tua siswa)</option><option value="guru">Guru</option></select>
+      <label for="nama">Nama lengkap</label><input id="nama" autocomplete="name">` : ""}
+      <label for="email">Email</label><input id="email" type="email" autocomplete="email">
+      <label for="pw">Password</label><input id="pw" type="password" autocomplete="${daftar ? "new-password" : "current-password"}">
+      ${daftar ? `<div id="extra"></div>` : ""}
+      <button type="submit">${daftar ? "Daftar" : "Masuk"}</button>
+      <div id="m" class="msg err" role="alert"></div>
+    </form>
+    <p class="msg">${daftar ? "Sudah punya akun?" : "Belum punya akun?"} <a href="#" id="sw">${daftar ? "Masuk" : "Daftar di sini"}</a></p>
+  </div>`;
+  $("#sw").onclick = (e) => { e.preventDefault(); authView(daftar ? "masuk" : "daftar"); };
+  if (daftar) {
+    const draw = () => {
+      $("#extra").innerHTML = $("#role").value === "guru"
+        ? `<label for="hp">No. HP</label><input id="hp" type="tel">`
+        : `<label for="pgl">Nama panggilan siswa</label><input id="pgl">
+           <label for="tl">Tanggal lahir siswa</label><input id="tl" type="date">
+           <label for="ortu">Nama orang tua</label><input id="ortu">
+           <label for="hpo">No. HP orang tua</label><input id="hpo" type="tel">
+           <label for="hps">No. HP siswa (boleh kosong)</label><input id="hps" type="tel">
+           <label for="almt">Alamat (boleh kosong)</label><input id="almt">`;
+    };
+    $("#role").onchange = draw; draw();
+  }
+  $("#f").onsubmit = async (e) => {
+    e.preventDefault();
+    const m = $("#m"); m.textContent = "";
+    const email = $("#email").value.trim(), pw = $("#pw").value;
+    try {
+      if (!daftar) { await signInWithEmailAndPassword(auth, email, pw); return; }
+      const role = $("#role").value, nama = $("#nama").value.trim();
+      if (!nama || !email || !pw) { m.textContent = "Nama, email, dan password wajib diisi."; return; }
+      let data;
+      if (role === "guru") {
+        const hp = $("#hp").value.trim();
+        if (!hp) { m.textContent = "No. HP wajib diisi."; return; }
+        data = { nama_lengkap: nama, no_hp: hp, program_diajarkan: [] };
+      } else {
+        const v = (id) => $("#" + id).value.trim();
+        if (!v("tl") || !v("ortu") || !v("hpo")) { m.textContent = "Tanggal lahir, nama orang tua, dan No. HP orang tua wajib diisi."; return; }
+        data = { nama_lengkap: nama, nama_panggilan: v("pgl"), tanggal_lahir: v("tl"), nama_orangtua: v("ortu"),
+                 no_hp_orangtua: v("hpo"), no_hp_siswa: v("hps"), alamat: v("almt"), catatan_khusus: "" };
+      }
+      busy = true;
+      const cred = await createUserWithEmailAndPassword(auth, email, pw);
+      const uid = cred.user.uid;
+      await setDoc(doc(db, "users", uid), { email, role, nama, status: "aktif", created_at: serverTimestamp() });
+      await setDoc(doc(db, role, uid), { ...data, uid, status_verifikasi: "menunggu", status: "aktif",
+        created_at: serverTimestamp(), updated_at: serverTimestamp() });
+      busy = false;
+      await showHome(cred.user);
+    } catch (err) { busy = false; m.textContent = errText(err); }
+  };
+}
+
+function profileView(role, p) {
+  const f = role === "guru"
+    ? [["Nama lengkap", p.nama_lengkap], ["No. HP", p.no_hp]]
+    : [["Nama lengkap", p.nama_lengkap], ["Nama panggilan", p.nama_panggilan], ["Tanggal lahir", p.tanggal_lahir],
+       ["Nama orang tua", p.nama_orangtua], ["No. HP orang tua", p.no_hp_orangtua], ["No. HP siswa", p.no_hp_siswa], ["Alamat", p.alamat]];
+  const ok = p.status_verifikasi === "terverifikasi";
+  return `<div class="card">
+    <div class="top"><h2>Data saya</h2><span class="badge ${ok ? "done" : "wait"}">${ok ? "Terverifikasi" : "Menunggu verifikasi admin"}</span></div>
+    <dl>${f.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v) || "-"}</dd>`).join("")}</dl>
+  </div>`;
+}
+
+async function pendingList(col, title) {
+  const snap = await getDocs(query(collection(db, col), where("status_verifikasi", "==", "menunggu")));
+  const rows = snap.docs.map((d) => {
+    const x = d.data();
+    const info = col === "guru" ? esc(x.no_hp) : "Orang tua: " + esc(x.nama_orangtua) + " (" + esc(x.no_hp_orangtua) + ")";
+    return `<div class="row"><div><strong>${esc(x.nama_lengkap)}</strong><br><small>${info}</small></div>
+      <button class="sm" data-col="${col}" data-id="${d.id}">Verifikasi</button></div>`;
+  }).join("");
+  return `<div class="card"><h2>${title} (${snap.size})</h2>${rows || `<p class="msg">Tidak ada yang menunggu verifikasi.</p>`}</div>`;
+}
+
+async function showHome(user) {
+  if (busy) return;
+  root.innerHTML = `<div class="card">Memuat…</div>`;
+  try {
+    const u = await getDoc(doc(db, "users", user.uid));
+    if (!u.exists()) {
+      root.innerHTML = `<div class="card"><h2>Akun belum lengkap</h2><p>Data akun tidak ditemukan. Hubungi admin.</p><button id="out" class="alt">Keluar</button></div>`;
+      $("#out").onclick = () => signOut(auth); return;
+    }
+    const { role, nama } = u.data();
+    let body = "";
+    if (role === "admin") {
+      body = `<div class="card"><h2>Panel Admin</h2><p class="msg">Verifikasi data guru dan siswa yang baru mendaftar. Menu lain menyusul di tahap berikutnya.</p></div>`
+        + await pendingList("guru", "Guru menunggu verifikasi") + await pendingList("siswa", "Siswa menunggu verifikasi");
+    } else {
+      const p = await getDoc(doc(db, role, user.uid));
+      body = p.exists() ? profileView(role, p.data()) : `<div class="card">Data profil belum ada. Hubungi admin.</div>`;
+      body += `<div class="card"><p class="msg">Jadwal, absensi, dan catatan les akan muncul di sini pada tahap berikutnya.</p></div>`;
+    }
+    root.innerHTML = `<div class="card top"><div><strong>${esc(nama)}</strong><br><small>${esc(role)}</small></div><button id="out" class="alt sm">Keluar</button></div>${body}`;
+    $("#out").onclick = () => signOut(auth);
+    root.querySelectorAll("button[data-id]").forEach((b) => b.onclick = async () => {
+      b.disabled = true;
+      try { await updateDoc(doc(db, b.dataset.col, b.dataset.id), { status_verifikasi: "terverifikasi", updated_at: serverTimestamp() }); await showHome(user); }
+      catch (e) { b.disabled = false; alert(errText(e)); }
+    });
+  } catch (e) {
+    root.innerHTML = `<div class="card"><h2>Gagal memuat</h2><p class="msg err">${esc(errText(e))}</p><button id="out" class="alt">Keluar</button></div>`;
+    $("#out").onclick = () => signOut(auth);
+  }
+}
+
+onAuthStateChanged(auth, (user) => { if (busy) return; user ? showHome(user) : authView("masuk"); });
+</script>
+</body>
+</html>
