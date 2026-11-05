@@ -27,6 +27,12 @@ button.sm{margin:0;padding:7px 12px;font-size:.9rem}
 .wait{background:#fdf0cf;color:#7a5a00}.done{background:#d9f2e4;color:var(--ok)}
 .top{display:flex;justify-content:space-between;align-items:center;gap:10px}
 dl{margin:0;font-family:system-ui,sans-serif}dt{color:var(--mute);font-size:.85rem;margin-top:10px}dd{margin:0}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.tabs button{margin:0;padding:8px 14px;font-size:.9rem;background:#fff;color:var(--brand);border:1px solid var(--brand)}
+.tabs button.on{background:var(--brand);color:#fff}
+.chk{display:flex;gap:8px;align-items:center;font-weight:400}.chk input{width:auto}
+details{margin-top:10px;font-family:system-ui,sans-serif}summary{cursor:pointer;color:var(--brand);font-weight:600}
+small{color:var(--mute)}
 </style>
 </head>
 <body>
@@ -36,7 +42,7 @@ dl{margin:0;font-family:system-ui,sans-serif}dt{color:var(--mute);font-size:.85r
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, collection, query, where, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBzkDez2oSiD6dkpOpn4oHw6GM5E3ioZpk",
@@ -141,15 +147,130 @@ function profileView(role, p) {
   </div>`;
 }
 
-async function pendingList(col, title) {
-  const snap = await getDocs(query(collection(db, col), where("status_verifikasi", "==", "menunggu")));
-  const rows = snap.docs.map((d) => {
-    const x = d.data();
-    const info = col === "guru" ? esc(x.no_hp) : "Orang tua: " + esc(x.nama_orangtua) + " (" + esc(x.no_hp_orangtua) + ")";
-    return `<div class="row"><div><strong>${esc(x.nama_lengkap)}</strong><br><small>${info}</small></div>
-      <button class="sm" data-col="${col}" data-id="${d.id}">Verifikasi</button></div>`;
-  }).join("");
-  return `<div class="card"><h2>${title} (${snap.size})</h2>${rows || `<p class="msg">Tidak ada yang menunggu verifikasi.</p>`}</div>`;
+const rp = (n) => "Rp " + Number(n).toLocaleString("id-ID");
+const topBar = (nama, role) => `<div class="card top"><div><strong>${esc(nama)}</strong><br><small>${esc(role)}</small></div><button id="out" class="alt sm">Keluar</button></div>`;
+let adminTab = "verif";
+
+function enrollCard(role, list) {
+  const rows = list.map((e) => `<div class="row"><div><strong>${esc(role === "guru" ? e.nama_siswa : e.nama_program)}</strong><br>
+    <small>${role === "guru" ? esc(e.nama_program) : "Guru: " + esc(e.nama_guru)} · ${esc(e.grade_saat_ini) || "grade belum ditentukan"}</small></div>
+    <span class="badge ${e.status === "aktif" ? "done" : "wait"}">${esc(e.status)}</span></div>`).join("");
+  return `<div class="card"><h2>${role === "guru" ? "Siswa saya" : "Program saya"}</h2>${rows || `<p class="msg">Belum ada.</p>`}</div>`;
+}
+
+async function adminView(user, nama) {
+  const load = async (c) => (await getDocs(collection(db, c))).docs.map((d) => ({ id: d.id, ...d.data() }));
+  const [progs, gurus, siswas, ens] = await Promise.all([load("program"), load("guru"), load("siswa"), load("siswa_program")]);
+  const aktif = progs.filter((p) => p.status === "aktif");
+  const wait = (x) => x.status_verifikasi === "menunggu";
+  const badge = (x) => `<span class="badge ${wait(x) ? "wait" : "done"}">${wait(x) ? "Menunggu" : "Terverifikasi"}</span>`;
+  const gradesOf = (p) => p.grade_urutan || Object.keys(p.tarif_per_grade || {});
+  const tabs = [["verif", "Verifikasi"], ["program", "Program"], ["guru", "Guru"], ["siswa", "Siswa"]];
+  let body = "";
+
+  if (adminTab === "verif") {
+    const rows = (col, list) => list.filter(wait).map((x) => `<div class="row"><div><strong>${esc(x.nama_lengkap)}</strong><br>
+      <small>${col === "guru" ? esc(x.no_hp) : "Orang tua: " + esc(x.nama_orangtua) + " (" + esc(x.no_hp_orangtua) + ")"}</small></div>
+      <button class="sm" data-act="verif" data-col="${col}" data-id="${x.id}">Verifikasi</button></div>`).join("");
+    const g = rows("guru", gurus), s = rows("siswa", siswas);
+    body = `<div class="card"><h2>Guru menunggu verifikasi</h2>${g || `<p class="msg">Tidak ada.</p>`}</div>
+            <div class="card"><h2>Siswa menunggu verifikasi</h2>${s || `<p class="msg">Tidak ada.</p>`}</div>`;
+  }
+
+  if (adminTab === "program") {
+    body = `<div class="card"><h2>Tambah program</h2><form id="pf" novalidate>
+      <label for="pn">Nama program</label><input id="pn" placeholder="Piano Klasik">
+      <label for="pd">Durasi sesi (menit)</label><select id="pd"><option>30</option><option>45</option><option selected>60</option></select>
+      <label for="pt">Grade dan tarif per bulan (satu baris satu grade)</label>
+      <textarea id="pt" rows="5" placeholder="Pemula=250000&#10;Grade 1=300000&#10;Grade 2=350000"></textarea>
+      <button type="submit">Simpan program</button><div id="pm" class="msg err" role="alert"></div></form></div>`
+      + progs.map((p) => `<div class="card"><div class="top"><div><strong>${esc(p.nama)}</strong><br><small>${p.durasi_standar_menit} menit</small></div>
+        <button class="alt sm" data-act="toggleprog" data-id="${p.id}" data-to="${p.status === "aktif" ? "nonaktif" : "aktif"}">${p.status === "aktif" ? "Nonaktifkan" : "Aktifkan"}</button></div>
+        ${gradesOf(p).map((k) => `<div class="row"><span>${esc(k)}</span><span>${rp(p.tarif_per_grade[k])}</span></div>`).join("")}</div>`).join("");
+  }
+
+  if (adminTab === "guru") {
+    body = gurus.map((g) => `<div class="card"><div class="top"><strong>${esc(g.nama_lengkap)}</strong>${badge(g)}</div><small>${esc(g.no_hp)}</small>
+      <div data-g="${g.id}"><label>Program yang diajarkan</label>
+      ${aktif.map((p) => `<label class="chk"><input type="checkbox" value="${p.id}" ${(g.program_diajarkan || []).includes(p.id) ? "checked" : ""}> ${esc(p.nama)}</label>`).join("") || `<p class="msg">Buat program dulu di tab Program.</p>`}
+      <button class="sm" data-act="saveguru" data-id="${g.id}">Simpan</button></div></div>`).join("") || `<div class="card">Belum ada guru yang mendaftar.</div>`;
+  }
+
+  if (adminTab === "siswa") {
+    body = siswas.map((s) => {
+      const mine = ens.filter((e) => e.siswaId === s.id);
+      return `<div class="card"><div class="top"><strong>${esc(s.nama_lengkap)}</strong>${badge(s)}</div>
+      <small>Orang tua: ${esc(s.nama_orangtua)} (${esc(s.no_hp_orangtua)})</small>
+      ${mine.map((e) => `<div class="row"><div>${esc(e.nama_program)} · ${esc(e.nama_guru)}<br><small>${esc(e.grade_saat_ini) || "grade belum ditentukan"} · ${esc(e.status)}</small></div>
+        ${e.status === "aktif" ? `<button class="alt sm" data-act="stopenr" data-id="${e.id}">Hentikan</button>` : ""}</div>`).join("")}
+      <details><summary>Tambah program</summary><div class="enf" data-s="${s.id}">
+        <label>Program</label><select class="ep">${aktif.map((p) => `<option value="${p.id}">${esc(p.nama)}</option>`).join("")}</select>
+        <label>Guru</label><select class="eg"></select>
+        <label>Grade saat ini</label><select class="er"></select>
+        <button class="sm" data-act="addenr" data-id="${s.id}">Simpan</button></div></details></div>`;
+    }).join("") || `<div class="card">Belum ada siswa yang mendaftar.</div>`;
+  }
+
+  root.innerHTML = topBar(nama, "admin")
+    + `<div class="tabs">${tabs.map(([k, t]) => `<button data-tab="${k}" class="${adminTab === k ? "on" : ""}">${t}</button>`).join("")}</div>` + body;
+  $("#out").onclick = () => signOut(auth);
+  const again = () => showHome(user);
+  root.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { adminTab = b.dataset.tab; again(); });
+
+  // isi pilihan guru dan grade sesuai program
+  root.querySelectorAll(".enf").forEach((box) => {
+    const fill = () => {
+      const p = progs.find((x) => x.id === box.querySelector(".ep").value);
+      const gs = p ? gurus.filter((g) => (g.program_diajarkan || []).includes(p.id)) : [];
+      box.querySelector(".eg").innerHTML = gs.map((g) => `<option value="${g.id}">${esc(g.nama_lengkap)}</option>`).join("") || `<option value="">Belum ada guru untuk program ini</option>`;
+      box.querySelector(".er").innerHTML = `<option value="">Belum ditentukan</option>` + (p ? gradesOf(p).map((k) => `<option>${esc(k)}</option>`).join("") : "");
+    };
+    box.querySelector(".ep").onchange = fill; fill();
+  });
+
+  const pf = $("#pf");
+  if (pf) pf.onsubmit = async (e) => {
+    e.preventDefault();
+    const m = $("#pm"); m.textContent = "";
+    const nm = $("#pn").value.trim();
+    const tarif = {}, urutan = [];
+    for (const line of $("#pt").value.split("\n").map((l) => l.trim()).filter(Boolean)) {
+      const i = line.lastIndexOf("=");
+      const k = line.slice(0, i).trim(), v = Number(line.slice(i + 1).replace(/\D/g, ""));
+      if (i < 1 || !k || !v) { m.textContent = `Baris "${line}" salah. Tulis seperti: Grade 1=300000`; return; }
+      tarif[k] = v; urutan.push(k);
+    }
+    if (!nm || !urutan.length) { m.textContent = "Nama program dan minimal satu grade wajib diisi."; return; }
+    try {
+      await addDoc(collection(db, "program"), { nama: nm, durasi_standar_menit: Number($("#pd").value), tarif_per_grade: tarif, grade_urutan: urutan, status: "aktif" });
+      again();
+    } catch (err) { m.textContent = errText(err); }
+  };
+
+  root.querySelectorAll("[data-act]").forEach((b) => b.onclick = async () => {
+    const a = b.dataset.act, id = b.dataset.id;
+    b.disabled = true;
+    try {
+      if (a === "verif") await updateDoc(doc(db, b.dataset.col, id), { status_verifikasi: "terverifikasi", updated_at: serverTimestamp() });
+      if (a === "toggleprog") await updateDoc(doc(db, "program", id), { status: b.dataset.to });
+      if (a === "stopenr") await updateDoc(doc(db, "siswa_program", id), { status: "berhenti", updated_at: serverTimestamp() });
+      if (a === "saveguru") {
+        const ids = [...root.querySelectorAll(`[data-g="${id}"] input:checked`)].map((i) => i.value);
+        await updateDoc(doc(db, "guru", id), { program_diajarkan: ids, updated_at: serverTimestamp() });
+      }
+      if (a === "addenr") {
+        const box = root.querySelector(`.enf[data-s="${id}"]`);
+        const p = progs.find((x) => x.id === box.querySelector(".ep").value);
+        const g = gurus.find((x) => x.id === box.querySelector(".eg").value);
+        const s = siswas.find((x) => x.id === id);
+        if (!p || !g) { alert("Pilih program dan guru. Guru harus diatur dulu di tab Guru."); b.disabled = false; return; }
+        await addDoc(collection(db, "siswa_program"), { siswaId: id, programId: p.id, guruId: g.id, nama_siswa: s.nama_lengkap, nama_program: p.nama,
+          nama_guru: g.nama_lengkap, grade_saat_ini: box.querySelector(".er").value, status: "aktif",
+          tanggal_mulai: new Date().toISOString().slice(0, 10), updated_at: serverTimestamp() });
+      }
+      again();
+    } catch (err) { b.disabled = false; alert(errText(err)); }
+  });
 }
 
 async function showHome(user) {
@@ -162,22 +283,14 @@ async function showHome(user) {
       $("#out").onclick = () => signOut(auth); return;
     }
     const { role, nama } = u.data();
-    let body = "";
-    if (role === "admin") {
-      body = `<div class="card"><h2>Panel Admin</h2><p class="msg">Verifikasi data guru dan siswa yang baru mendaftar. Menu lain menyusul di tahap berikutnya.</p></div>`
-        + await pendingList("guru", "Guru menunggu verifikasi") + await pendingList("siswa", "Siswa menunggu verifikasi");
-    } else {
-      const p = await getDoc(doc(db, role, user.uid));
-      body = p.exists() ? profileView(role, p.data()) : `<div class="card">Data profil belum ada. Hubungi admin.</div>`;
-      body += `<div class="card"><p class="msg">Jadwal, absensi, dan catatan les akan muncul di sini pada tahap berikutnya.</p></div>`;
-    }
-    root.innerHTML = `<div class="card top"><div><strong>${esc(nama)}</strong><br><small>${esc(role)}</small></div><button id="out" class="alt sm">Keluar</button></div>${body}`;
+    if (role === "admin") { await adminView(user, nama); return; }
+    const p = await getDoc(doc(db, role, user.uid));
+    const es = await getDocs(query(collection(db, "siswa_program"), where(role === "guru" ? "guruId" : "siswaId", "==", user.uid)));
+    root.innerHTML = topBar(nama, role)
+      + (p.exists() ? profileView(role, p.data()) : `<div class="card">Data profil belum ada. Hubungi admin.</div>`)
+      + enrollCard(role, es.docs.map((d) => d.data()))
+      + `<div class="card"><p class="msg">Jadwal, absensi, dan catatan les menyusul di tahap berikutnya.</p></div>`;
     $("#out").onclick = () => signOut(auth);
-    root.querySelectorAll("button[data-id]").forEach((b) => b.onclick = async () => {
-      b.disabled = true;
-      try { await updateDoc(doc(db, b.dataset.col, b.dataset.id), { status_verifikasi: "terverifikasi", updated_at: serverTimestamp() }); await showHome(user); }
-      catch (e) { b.disabled = false; alert(errText(e)); }
-    });
   } catch (e) {
     root.innerHTML = `<div class="card"><h2>Gagal memuat</h2><p class="msg err">${esc(errText(e))}</p><button id="out" class="alt">Keluar</button></div>`;
     $("#out").onclick = () => signOut(auth);
