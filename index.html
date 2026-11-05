@@ -78,7 +78,7 @@ const db = getFirestore(app);
 const $ = (s) => document.querySelector(s);
 const root = $("#app");
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-let busy = false; // true saat proses daftar berlangsung
+let busy = false;
 
 function errText(e) {
   const m = {
@@ -182,11 +182,9 @@ const jamAkhir = (j, m) => { const [h, mi] = j.split(":").map(Number); const t =
 const tglLabel = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" }); };
 let weekStart = monday(new Date()), guruFilter = "", calMode = "minggu", selDay = ymd(new Date());
 
-// Buat sesi 3 bulan ke depan dari pola aktif; sesi yang sudah ada tidak ditimpa
 async function generate(polas) {
   const snapF = await getDocs(query(collection(db, "jadwal"), where("tanggal", ">=", ymd(new Date()))));
   const have = new Set(snapF.docs.map((d) => d.id));
-  // bersihkan sesi reguler pertemuan ke-5 yang sudah terlanjur dibuat
   const libur = snapF.docs.filter((d) => { const x = d.data(); return x.tipe === "reguler" && x.status === "terjadwal" && Number(x.tanggal.slice(8)) >= 29; });
   for (let i = 0; i < libur.length; i += 400) { const b = writeBatch(db); libur.slice(i, i + 400).forEach((d) => b.delete(d.ref)); await b.commit(); }
   const endStr = ymd(addDays(new Date(), 90)), writes = [];
@@ -220,7 +218,6 @@ async function closePola(p) {
 
 const STATUS_ABS = ["hadir", "tidak_hadir", "izin", "sakit", "reschedule"];
 
-// Form absensi / pindah jadwal / ajukan reschedule di bawah tiap sesi
 function sesiBox(j, role, A, C, gurus) {
   const t = ymd(new Date()), a = A[j.id], c = C[j.id], staff = role === "guru" || role === "admin";
   const live = j.status !== "dibatalkan" && j.status !== "digantikan";
@@ -258,7 +255,6 @@ function reqCard(r, role, gurus) {
   return o + "</div>";
 }
 
-// Buat sesi baru, tandai sesi lama "digantikan", dan catat reschedule
 async function applyResched(j, jenis, tgl, jam, g, uid, reqId) {
   const u = serverTimestamp(), b = writeBatch(db);
   b.set(doc(collection(db, "jadwal")), { siswaId: j.siswaId, programId: j.programId, guruId: g ? g.id : j.guruId, nama_siswa: j.nama_siswa,
@@ -272,7 +268,6 @@ async function applyResched(j, jenis, tgl, jam, g, uid, reqId) {
   await b.commit();
 }
 
-// Mengembalikan true jika berhasil, false jika input kurang lengkap
 async function sesiAction(a, id, btn, ctx) {
   const jd = async (jid) => ({ id: jid, ...(await getDoc(doc(db, "jadwal", jid))).data() });
   const v = (box, s) => box.querySelector(s).value.trim();
@@ -314,6 +309,14 @@ async function sesiAction(a, id, btn, ctx) {
 
 let uMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1), uSel = ymd(new Date());
 const sec = (title, inner) => `<details class="card sec"><summary>${title}</summary>${inner}</details>`;
+
+// ====== TAMBAHAN: kartu program (dipakai userView & admin) ======
+function enrollCard(role, es) {
+  if (!es || !es.length) return `<p class="msg">Belum ada data.</p>`;
+  return es.map((e) => `<div class="row"><div><strong>${esc(e.nama_program || e.programId)}</strong><br>
+    <small>${role === "guru" ? "Siswa: " + esc(e.nama_siswa) : "Guru: " + esc(e.nama_guru)} · status ${esc(e.status || "-")}</small></div>
+    <span class="badge ${e.status === "aktif" ? "done" : "wait"}">${esc(e.status || "-")}</span></div>`).join("");
+}
 
 async function userView(user, nama, role, p) {
   const fld = role === "guru" ? "guruId" : "siswaId", t = ymd(new Date());
@@ -372,6 +375,108 @@ async function userView(user, nama, role, p) {
     });
   };
   draw();
+}
+
+// ====== TAMBAHAN: adminView ======
+async function adminView(user, nama) {
+  const draw = async () => {
+    const [gs, ss, pr, sp, po, rq] = await Promise.all([
+      getDocs(collection(db, "guru")),
+      getDocs(collection(db, "siswa")),
+      getDocs(collection(db, "program")),
+      getDocs(collection(db, "siswa_program")),
+      getDocs(collection(db, "pola_jadwal")),
+      getDocs(query(collection(db, "reschedule"), where("status", "==", "menunggu")))
+    ]);
+    const gurus = gs.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const siswas = ss.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const programs = pr.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const enrolls = sp.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const polas = po.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const reqs = rq.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const pendingGuru = gurus.filter((g) => g.status_verifikasi === "menunggu");
+    const pendingSiswa = siswas.filter((s) => s.status_verifikasi === "menunggu");
+
+    const tab = (id, label) => `<button data-tab="${id}" class="${adminTab === id ? "on" : ""}">${label}</button>`;
+    let body = "";
+
+    if (adminTab === "verif") {
+      body = `<h2>Menunggu verifikasi</h2>`
+        + (pendingGuru.length ? `<h3>Guru</h3>` + pendingGuru.map((g) => `<div class="row"><div><strong>${esc(g.nama_lengkap)}</strong><br><small>${esc(g.no_hp)}</small></div>
+            <button class="sm" data-ver="guru" data-id="${g.id}">Verifikasi</button></div>`).join("") : "")
+        + (pendingSiswa.length ? `<h3>Siswa</h3>` + pendingSiswa.map((s) => `<div class="row"><div><strong>${esc(s.nama_lengkap)}</strong><br><small>${esc(s.nama_orangtua)} · ${esc(s.no_hp_orangtua)}</small></div>
+            <button class="sm" data-ver="siswa" data-id="${s.id}">Verifikasi</button></div>`).join("") : "")
+        + (!pendingGuru.length && !pendingSiswa.length ? `<p class="msg">Tidak ada yang menunggu verifikasi.</p>` : "");
+    } else if (adminTab === "program") {
+      body = `<h2>Program</h2>` + (programs.length ? programs.map((p) => `<div class="row"><div><strong>${esc(p.nama_program)}</strong><br><small>${rp(p.harga || 0)} / bulan · ${p.durasi_menit || 60} menit</small></div></div>`).join("") : `<p class="msg">Belum ada program.</p>`)
+        + `<details><summary>Tambah program</summary><div data-newprog>
+            <label>Nama program</label><input class="pn"><label>Harga (Rp)</label><input class="ph" type="number">
+            <label>Durasi (menit)</label><input class="pd" type="number" value="60">
+            <button class="sm" data-act="addprog">Simpan</button></div></details>`;
+    } else if (adminTab === "enroll") {
+      body = `<h2>Pendaftaran program</h2>`
+        + (enrolls.length ? enrolls.map((e) => `<div class="row"><div><strong>${esc(e.nama_siswa)}</strong> · ${esc(e.nama_program)}<br><small>Guru: ${esc(e.nama_guru)} · ${esc(e.status)}</small></div></div>`).join("") : `<p class="msg">Belum ada.</p>`)
+        + `<details><summary>Daftarkan siswa ke program</summary><div data-newenroll>
+            <label>Siswa</label><select class="es">${siswas.map((s) => `<option value="${s.id}">${esc(s.nama_lengkap)}</option>`).join("")}</select>
+            <label>Program</label><select class="ep">${programs.map((p) => `<option value="${p.id}">${esc(p.nama_program)}</option>`).join("")}</select>
+            <label>Guru</label><select class="eg">${gurus.map((g) => `<option value="${g.id}">${esc(g.nama_lengkap)}</option>`).join("")}</select>
+            <button class="sm" data-act="addenroll">Daftarkan</button></div></details>`;
+    } else if (adminTab === "pola") {
+      body = `<h2>Pola jadwal</h2>` + (polas.length ? polas.map((p) => `<div class="row"><div><strong>${esc(p.nama_siswa)}</strong> · ${esc(p.nama_program)}<br>
+          <small>${esc(p.hari)} ${esc(p.jam_mulai)} · ${esc(p.status)}</small></div>
+          ${p.status === "aktif" ? `<button class="alt sm" data-act="closepola" data-id="${p.id}">Hentikan</button>` : ""}</div>`).join("") : `<p class="msg">Belum ada.</p>`)
+        + `<button class="sm" data-act="gen">Buat sesi 3 bulan ke depan</button>`;
+    } else if (adminTab === "resched") {
+      body = `<h2>Pengajuan reschedule</h2>` + (reqs.length ? reqs.map((r) => reqCard(r, "admin", gurus)).join("") : `<p class="msg">Tidak ada pengajuan menunggu.</p>`);
+    }
+
+    root.innerHTML = topBar(nama, "admin") + `<div class="tabs">
+        ${tab("verif", "Verifikasi")}${tab("program", "Program")}${tab("enroll", "Pendaftaran")}${tab("pola", "Pola jadwal")}${tab("resched", "Reschedule")}
+      </div><div class="card">${body}</div>`;
+    $("#out").onclick = () => signOut(auth);
+    root.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { adminTab = b.dataset.tab; draw(); });
+    root.querySelectorAll("[data-ver]").forEach((b) => b.onclick = async () => {
+      b.disabled = true;
+      try {
+        await updateDoc(doc(db, b.dataset.ver, b.dataset.id), { status_verifikasi: "terverifikasi", updated_at: serverTimestamp() });
+        await draw();
+      } catch (err) { b.disabled = false; alert(errText(err)); }
+    });
+    root.querySelectorAll("[data-act]").forEach((b) => b.onclick = async () => {
+      b.disabled = true;
+      try {
+        const a = b.dataset.act;
+        if (a === "addprog") {
+          const box = root.querySelector("[data-newprog]");
+          const n = box.querySelector(".pn").value.trim();
+          if (!n) { alert("Nama program wajib."); b.disabled = false; return; }
+          await addDoc(collection(db, "program"), { nama_program: n, harga: Number(box.querySelector(".ph").value) || 0,
+            durasi_menit: Number(box.querySelector(".pd").value) || 60, created_at: serverTimestamp() });
+          await draw(); return;
+        }
+        if (a === "addenroll") {
+          const box = root.querySelector("[data-newenroll]");
+          const sid = box.querySelector(".es").value, pid = box.querySelector(".ep").value, gid = box.querySelector(".eg").value;
+          const s = siswas.find((x) => x.id === sid), p = programs.find((x) => x.id === pid), g = gurus.find((x) => x.id === gid);
+          await addDoc(collection(db, "siswa_program"), { siswaId: sid, programId: pid, guruId: gid, nama_siswa: s?.nama_lengkap || "",
+            nama_program: p?.nama_program || "", nama_guru: g?.nama_lengkap || "", status: "aktif", created_at: serverTimestamp() });
+          await draw(); return;
+        }
+        if (a === "closepola") { await closePola({ id: b.dataset.id }); await draw(); return; }
+        if (a === "gen") { const n = await generate(polas); alert(n + " sesi dibuat."); await draw(); return; }
+        if (["approve", "reject"].includes(a)) {
+          const ok = await sesiAction(a, b.dataset.id, b, { user, role: "admin", gurus });
+          if (ok) await draw(); else b.disabled = false; return;
+        }
+      } catch (err) { b.disabled = false; alert(errText(err)); }
+    });
+    root.querySelectorAll("[data-act='saveabs'],[data-act='applyres'],[data-act='reqres']").forEach((b) => b.onclick = async () => {
+      b.disabled = true;
+      try { const ok = await sesiAction(b.dataset.act, b.dataset.id, b, { user, role: "admin", gurus }); if (ok) await draw(); else b.disabled = false; }
+      catch (err) { b.disabled = false; alert(errText(err)); }
+    });
+  };
+  await draw();
 }
 
 async function showHome(user) {
